@@ -33,7 +33,8 @@ data class DistributionEntity(
     val completedTimestamp: Long? = null,
     val hasPendingSync: Boolean = false, // True when offline changes need to be flushed to Firestore
     val lastModifiedTimestamp: Long = System.currentTimeMillis(),
-    val lastSyncedTimestamp: Long = 0L
+    val lastSyncedTimestamp: Long = 0L,
+    val isHost: Boolean = true // True if created by current user on this device, false if joined via code
 ) {
     val isOnline: Boolean
         get() = roomMode == RoomMode.ONLINE
@@ -56,7 +57,7 @@ data class ParticipantEntity(
     val distributionId: Long,
     val name: String,
     val allocatedCount: Int, // Number of Paras (for KHATM) or Recitations (for AMAL) or 1 (for ONE_TIME_KHATM)
-    val displayOrder: Int,
+    val displayOrder: Int = 0,
     val specificParaNumber: Int? = null, // 1..30 for ONE_TIME_KHATM first-come-first-served Para claims
     val completedCount: Int = 0, // Tactile recitation counter progress (0..allocatedCount) for AMAL
     val isCompleted: Boolean = false, // Completion tickmark for ONE_TIME_KHATM and AMAL
@@ -64,10 +65,14 @@ data class ParticipantEntity(
     val isGuestEntry: Boolean = false, // True if claimed on behalf of an elderly family member / guest (e.g. Grandma)
     val addedByProfileName: String = "",
     val isPinned: Boolean = false, // Pin My Paras to the top of the room view
+    val isAdmin: Boolean = false, // Admin powers assigned by host
     val hasPendingSync: Boolean = false, // True when local offline updates are waiting to sync to Firestore
     val lastModifiedTimestamp: Long = System.currentTimeMillis(),
     val updatedAtTimestamp: Long = System.currentTimeMillis()
 ) {
+    val isGuest: Boolean
+        get() = isGuestEntry
+
     fun isCompletedForMonth(year: Int, month: Int): Boolean {
         if (completedCycleMonthsCsv.isBlank()) return false
         val key = "$year-$month"

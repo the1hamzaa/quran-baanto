@@ -1,16 +1,20 @@
 package com.example.ui.distribution
 
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,46 +23,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.QrCode2
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,32 +52,37 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.db.DistributionType
 import com.example.data.db.RoomMode
 import com.example.domain.ParticipantAllocation
-import com.example.ui.components.ManuscriptOrnamentDivider
-import com.example.ui.components.PrimarySanctuaryButton
-import com.example.ui.components.SanctuaryTopHeader
-import com.example.ui.components.SecondaryEditorialButton
-import com.example.ui.theme.LocalBlueAccent
-import com.example.ui.theme.LocalBlueGlow
-import com.example.ui.theme.OnlineGoldAccent
-import com.example.ui.theme.OnlineGoldGlow
+import com.example.ui.components.WaveDivider
+import com.example.ui.theme.FrauncesFontFamily
+import com.example.ui.theme.InterFontFamily
+import com.example.ui.theme.QuranBaantoDesignSystem
 import com.example.ui.viewmodel.DistributionViewModel
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * EXACT CREATE / EDIT DISTRIBUTION WIZARD & SETUP FORMS
+ * Matches reference screenshots:
+ * - Create___Room_type (1 of 2)
+ * - Create___Distribution_type (2 of 2)
+ * - Create___Local_one-time_setup
+ * - Create___Local_monthly_setup
+ * - Create___Local_amal_setup
+ * - Create___Online_amal
+ *
+ * NO fake/placeholder data added; all lists start clean.
+ */
 @Composable
 fun CreateEditDistributionScreen(
     distributionId: Long?,
@@ -108,1801 +93,2585 @@ fun CreateEditDistributionScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val activeState by distributionViewModel.activeDistributionState.collectAsState()
-    val savedProfileName by distributionViewModel.userProfileName.collectAsState()
-    val isEditMode = distributionId != null && distributionId > 0L
+    val context = LocalContext.current
+    val colors = QuranBaantoDesignSystem.colors
 
-    var distributionName by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(initialType) }
+    // Wizard navigation steps:
+    // 1 = Room Type (Online vs Local)
+    // 2 = Distribution Type (Monthly Khatm, One-time, Amal)
+    // 3 = Room Detail Setup (Local assignments or Online Amal setup or Online name dialog)
+    var step by remember(distributionId) { mutableIntStateOf(if (distributionId != null) 3 else 1) }
     var selectedRoomMode by remember { mutableStateOf(initialRoomMode) }
-    var totalTargetText by remember {
-        mutableStateOf(if (initialType == DistributionType.AMAL) "100" else "30")
-    }
-    var showModeSwitcherInForm by remember { mutableStateOf(false) }
+    var selectedType by remember { mutableStateOf(initialType) }
 
-    // Local Room full roster (or existing Online Room roster when editing)
+    // Form inputs
+    var roomTitle by remember { mutableStateOf("") }
+    var totalTarget by remember { mutableIntStateOf(if (initialType == DistributionType.AMAL) 100 else 30) }
+
+    // Local participant allocations
     val allocations = remember { mutableStateListOf<ParticipantAllocation>() }
+    var newPersonName by remember { mutableStateOf("") }
+    var newPersonCount by remember { mutableIntStateOf(1) }
 
-    // Local Room "Add Person" builder state
-    var newParticipantName by remember { mutableStateOf("") }
-    var newParticipantCount by remember { mutableIntStateOf(1) }
-    var newParticipantCountText by remember { mutableStateOf("1") }
+    val activeState by distributionViewModel.activeDistributionState.collectAsState()
+    var hasLoadedEditData by remember(distributionId) { mutableStateOf(false) }
 
-    // Online Room optional Host Initial Claim state
-    var hostWantsInitialClaim by remember { mutableStateOf(false) }
-    var hostClaimName by remember(savedProfileName) { mutableStateOf(savedProfileName) }
-    var hostClaimCount by remember { mutableIntStateOf(1) }
-    var hostClaimCountText by remember { mutableStateOf("1") }
-    var hostSelectedParas by remember { mutableStateOf<List<Int>>(listOf(1)) }
-    var showHostParaPickerDialog by remember { mutableStateOf(false) }
-
-    var initializedForId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(distributionId) {
+        if (distributionId != null) {
+            distributionViewModel.selectDistribution(distributionId)
+        }
+    }
 
     LaunchedEffect(distributionId, activeState.distribution, activeState.participants) {
-        if (isEditMode) {
-            val dist = activeState.distribution
-            if (dist != null && dist.id == distributionId && initializedForId != distributionId) {
-                distributionName = dist.name
-                selectedType = dist.type
-                selectedRoomMode = dist.roomMode
-                totalTargetText = dist.totalTarget.toString()
-                allocations.clear()
+        if (distributionId != null && !hasLoadedEditData && activeState.distribution?.id == distributionId) {
+            val dist = activeState.distribution!!
+            selectedRoomMode = dist.roomMode
+            selectedType = dist.type
+            roomTitle = dist.name
+            totalTarget = dist.totalTarget
+            allocations.clear()
 
-                if (dist.type == DistributionType.ONE_TIME_KHATM && dist.roomMode == RoomMode.LOCAL) {
-                    // Group consecutive Paras back by participant name for editing Local One-Time Khatm
-                    val grouped = linkedMapOf<String, Int>()
-                    activeState.participants
-                        .sortedBy { it.specificParaNumber ?: it.displayOrder }
-                        .forEach { p ->
-                            grouped[p.name] = (grouped[p.name] ?: 0) + 1
-                        }
-                    var idx = 1
-                    grouped.forEach { (pName, count) ->
-                        allocations.add(
-                            ParticipantAllocation(
-                                id = 0L,
-                                name = pName,
-                                count = count,
-                                displayOrder = idx++
-                            )
-                        )
+            val sortedParts = activeState.participants.sortedBy { it.displayOrder }
+            if (dist.type == DistributionType.ONE_TIME_KHATM && dist.roomMode == RoomMode.LOCAL) {
+                var idx = 0
+                while (idx < sortedParts.size) {
+                    val current = sortedParts[idx]
+                    val paras = mutableListOf(current.specificParaNumber ?: current.displayOrder)
+                    var nextIdx = idx + 1
+                    while (nextIdx < sortedParts.size &&
+                        sortedParts[nextIdx].name.equals(current.name, ignoreCase = true)
+                    ) {
+                        paras.add(sortedParts[nextIdx].specificParaNumber ?: sortedParts[nextIdx].displayOrder)
+                        nextIdx++
                     }
-                } else {
-                    allocations.addAll(
-                        activeState.participants.map {
-                            ParticipantAllocation(
-                                id = it.id,
-                                name = it.name,
-                                count = it.allocatedCount,
-                                displayOrder = it.displayOrder
-                            )
-                        }
+                    allocations.add(
+                        ParticipantAllocation(
+                            id = current.id,
+                            name = current.name,
+                            count = paras.size,
+                            displayOrder = allocations.size + 1,
+                            specificParas = paras
+                        )
+                    )
+                    idx = nextIdx
+                }
+            } else {
+                sortedParts.forEachIndexed { idx, p ->
+                    allocations.add(
+                        ParticipantAllocation(
+                            id = p.id,
+                            name = p.name,
+                            count = p.allocatedCount,
+                            displayOrder = idx + 1,
+                            specificParas = listOfNotNull(p.specificParaNumber)
+                        )
                     )
                 }
-                initializedForId = distributionId
             }
+            step = 3
+            hasLoadedEditData = true
         }
     }
 
-    val isOnlineMode = selectedRoomMode == RoomMode.ONLINE
-    val isAmalMode = selectedType == DistributionType.AMAL
-    val isOneTimeKhatmMode = selectedType == DistributionType.ONE_TIME_KHATM
-    val isMonthlyKhatmMode = selectedType == DistributionType.KHATM
-
-    val activeAccent = if (isOnlineMode) OnlineGoldAccent else LocalBlueAccent
-    val activeGlow = if (isOnlineMode) OnlineGoldGlow else LocalBlueGlow
-
-    val effectiveTarget = if (isAmalMode) {
-        (totalTargetText.toIntOrNull() ?: 0).coerceAtLeast(0)
-    } else {
-        30
-    }
-
-    val context = LocalContext.current
-    var hasAttemptedSave by remember { mutableStateOf(false) }
-    var participantInputError by remember { mutableStateOf<String?>(null) }
-
-    val currentSum = allocations.sumOf { it.count }
-    val remainingUnits = effectiveTarget - currentSum
-
-    // Comprehensive Form Validation Rules:
-    // Computes all missing / invalid items so user is shown EXACTLY what is missing and why the form cannot proceed
-    val validationErrors = remember(
-        isOnlineMode,
-        isEditMode,
-        distributionName,
-        effectiveTarget,
-        allocations.toList(),
-        currentSum,
-        hostWantsInitialClaim,
-        hostClaimName,
-        hostClaimCount,
-        hostClaimCountText,
-        isAmalMode
-    ) {
-        val errors = mutableListOf<String>()
-        if (distributionName.trim().isBlank()) {
-            errors.add("Room Title / Name is compulsory (cannot be empty)")
-        }
-        if (effectiveTarget <= 0) {
-            errors.add("Total target count must be greater than 0")
-        }
-        if (!isOnlineMode) {
-            if (allocations.isEmpty()) {
-                errors.add(
-                    if (isAmalMode) "Roster is empty: Please add participants and allocate recitations"
-                    else "Roster is empty: Please add participants until all 30 Paras are assigned"
-                )
-            } else if (currentSum != effectiveTarget) {
-                val diff = effectiveTarget - currentSum
-                if (diff > 0) {
-                    errors.add("$diff ${if (isAmalMode) "recitations" else "Paras"} unassigned ($currentSum / $effectiveTarget assigned). Please assign all $effectiveTarget to proceed.")
-                } else {
-                    errors.add("Over-allocated by ${-diff} ${if (isAmalMode) "recitations" else "Paras"} ($currentSum / $effectiveTarget assigned). Please adjust to match $effectiveTarget.")
-                }
-            }
-            if (allocations.any { it.name.trim().isBlank() }) {
-                errors.add("Every member in the roster must have a valid name")
-            }
-        } else {
-            if (hostWantsInitialClaim && !isEditMode) {
-                if (hostClaimName.trim().isBlank()) {
-                    errors.add("Your display name is compulsory when pre-claiming a share")
-                }
-                val parsedHostCount = if (isAmalMode) {
-                    (hostClaimCountText.toIntOrNull() ?: 0)
-                } else {
-                    hostClaimCount
-                }
-                if (parsedHostCount !in 1..effectiveTarget.coerceAtLeast(1)) {
-                    errors.add("Pre-claim count must be between 1 and $effectiveTarget")
-                }
-            }
-        }
-        errors
-    }
-
-    val isValidToSave = validationErrors.isEmpty()
-
-    val addLocalParticipantAction = {
-        val trimmed = newParticipantName.trim()
-        val countToUse = if (isAmalMode) {
-            (newParticipantCountText.toIntOrNull() ?: 1).coerceAtLeast(1)
-        } else {
-            newParticipantCount.coerceIn(1, 30)
-        }
-        if (trimmed.isBlank()) {
-            participantInputError = "Participant name is compulsory to add them to the roster"
-        } else if (countToUse <= 0) {
-            participantInputError = "Allocated count must be at least 1"
-        } else {
-            participantInputError = null
-            allocations.add(
-                ParticipantAllocation(
-                    id = 0L,
-                    name = trimmed,
-                    count = countToUse,
-                    displayOrder = allocations.size + 1
-                )
-            )
-            newParticipantName = ""
-            val newRemaining = (effectiveTarget - allocations.sumOf { it.count }).coerceAtLeast(1)
-            newParticipantCount = newRemaining.coerceIn(1, 3)
-            newParticipantCountText = newRemaining.coerceAtMost(25).toString()
+    BackHandler {
+        when {
+            distributionId != null -> onNavigateBack()
+            step > 1 -> step -= 1
+            else -> onNavigateBack()
         }
     }
 
-    val distributeRemainingEquallyAction = {
-        if (allocations.isNotEmpty() && effectiveTarget > 0) {
-            val count = allocations.size
-            val baseShare = effectiveTarget / count
-            val remainder = effectiveTarget % count
-            if (baseShare >= 1) {
-                for (i in allocations.indices) {
-                    val share = baseShare + if (i < remainder) 1 else 0
-                    allocations[i] = allocations[i].copy(count = share)
-                }
-            }
-        }
+    val totalAssigned = allocations.sumOf { it.count }
+    val remainingToAssign = (totalTarget - totalAssigned).coerceAtLeast(0)
+    val onStep3Back: () -> Unit = {
+        if (distributionId != null) onNavigateBack() else step = 2
     }
 
-    val screenTitle = when {
-        isEditMode && isOnlineMode -> "Edit Online Room"
-        isEditMode && !isOnlineMode -> "Edit Local Schedule"
-        isOnlineMode -> "Setup Online Room"
-        else -> "Setup Local Schedule"
-    }
-
-    Scaffold(
-        topBar = {
-            SanctuaryTopHeader(
-                title = screenTitle,
-                badgeText = if (isOnlineMode) "ONLINE" else "LOCAL",
-                onBack = onNavigateBack
-            )
+    AnimatedContent(
+        targetState = step,
+        transitionSpec = {
+            fadeIn(tween(180, easing = FastOutSlowInEasing)) togetherWith
+                fadeOut(tween(140, easing = FastOutSlowInEasing))
         },
-        bottomBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                shadowElevation = 12.dp,
-                border = BorderStroke(0.8.dp, activeAccent.copy(alpha = 0.4f))
-            ) {
+        label = "create_edit_wizard_step",
+        modifier = modifier
+    ) { activeStep ->
+        when (activeStep) {
+            1 -> {
+                // STEP 1 OF 2: "Where will it take place?"
+                Step1RoomType(
+                    selectedMode = selectedRoomMode,
+                    onSelectMode = { selectedRoomMode = it },
+                    onContinue = { step = 2 },
+                    onBack = onNavigateBack
+                )
+            }
+            2 -> {
+                // STEP 2 OF 2: "What will you recite?"
+                Step2DistributionType(
+                    roomMode = selectedRoomMode,
+                    selectedType = selectedType,
+                    onSelectType = { selectedType = it },
+                    onChangeMode = { step = 1 },
+                    onContinue = {
+                        totalTarget = if (selectedRoomMode == RoomMode.LOCAL && selectedType == DistributionType.AMAL) {
+                            100
+                        } else if (selectedRoomMode == RoomMode.LOCAL) {
+                            30
+                        } else {
+                            totalTarget
+                        }
+                        step = 3
+                    },
+                    onBack = { step = 1 }
+                )
+            }
+            3 -> {
+                if (selectedRoomMode == RoomMode.LOCAL) {
+                    // Local Setup Form
+                    when (selectedType) {
+                        DistributionType.ONE_TIME_KHATM -> {
+                            LocalOneTimeSetup(
+                                title = roomTitle,
+                                onTitleChange = { roomTitle = it },
+                                allocations = allocations,
+                                totalTarget = 30,
+                                newPersonName = newPersonName,
+                                onNewPersonNameChange = { newPersonName = it },
+                                newPersonCount = newPersonCount,
+                                onNewPersonCountChange = { newPersonCount = it },
+                                onAddPerson = {
+                                    if (newPersonName.isNotBlank() && newPersonCount > 0) {
+                                        val startPara = totalAssigned + 1
+                                        val endPara = (startPara + newPersonCount - 1).coerceAtMost(30)
+                                        val paras = (startPara..endPara).toList()
+                                        allocations.add(
+                                            ParticipantAllocation(
+                                                name = newPersonName.trim(),
+                                                count = newPersonCount,
+                                                specificParas = paras
+                                            )
+                                        )
+                                        newPersonName = ""
+                                        newPersonCount = 1
+                                    }
+                                },
+                                onRemoveAllocation = { index ->
+                                    if (index in allocations.indices) {
+                                        allocations.removeAt(index)
+                                    }
+                                },
+                                onCreateRoom = {
+                                    val name = if (roomTitle.isNotBlank()) roomTitle.trim() else "One-Time Khatm"
+                                    distributionViewModel.saveDistribution(
+                                        name = name,
+                                        type = DistributionType.ONE_TIME_KHATM,
+                                        roomMode = RoomMode.LOCAL,
+                                        totalTarget = 30,
+                                        allocations = allocations,
+                                        existingId = distributionId
+                                    ) { savedId ->
+                                        onSaved(savedId)
+                                    }
+                                },
+                                onBack = onStep3Back
+                            )
+                        }
+                        DistributionType.KHATM -> {
+                            LocalMonthlySetup(
+                                title = roomTitle,
+                                onTitleChange = { roomTitle = it },
+                                allocations = allocations,
+                                totalTarget = 30,
+                                newPersonName = newPersonName,
+                                onNewPersonNameChange = { newPersonName = it },
+                                newPersonCount = newPersonCount,
+                                onNewPersonCountChange = { newPersonCount = it },
+                                onAddPerson = {
+                                    if (newPersonName.isNotBlank() && newPersonCount > 0) {
+                                        val startPara = totalAssigned + 1
+                                        val endPara = (startPara + newPersonCount - 1).coerceAtMost(30)
+                                        val paras = (startPara..endPara).toList()
+                                        allocations.add(
+                                            ParticipantAllocation(
+                                                name = newPersonName.trim(),
+                                                count = newPersonCount,
+                                                specificParas = paras
+                                            )
+                                        )
+                                        newPersonName = ""
+                                        newPersonCount = 1
+                                    }
+                                },
+                                onRemoveAllocation = { index ->
+                                    if (index in allocations.indices) {
+                                        allocations.removeAt(index)
+                                    }
+                                },
+                                onCreateRoom = {
+                                    val name = if (roomTitle.isNotBlank()) roomTitle.trim() else "Monthly Khatm"
+                                    distributionViewModel.saveDistribution(
+                                        name = name,
+                                        type = DistributionType.KHATM,
+                                        roomMode = RoomMode.LOCAL,
+                                        totalTarget = 30,
+                                        allocations = allocations,
+                                        existingId = distributionId
+                                    ) { savedId ->
+                                        onSaved(savedId)
+                                    }
+                                },
+                                onBack = onStep3Back
+                            )
+                        }
+                        DistributionType.AMAL -> {
+                            LocalAmalSetup(
+                                title = roomTitle,
+                                onTitleChange = { roomTitle = it },
+                                totalTarget = totalTarget,
+                                onTotalTargetChange = { totalTarget = it },
+                                allocations = allocations,
+                                newPersonName = newPersonName,
+                                onNewPersonNameChange = { newPersonName = it },
+                                newPersonCount = newPersonCount,
+                                onNewPersonCountChange = { newPersonCount = it },
+                                onAddPerson = {
+                                    if (newPersonName.isNotBlank() && newPersonCount > 0) {
+                                        allocations.add(
+                                            ParticipantAllocation(
+                                                name = newPersonName.trim(),
+                                                count = newPersonCount
+                                            )
+                                        )
+                                        newPersonName = ""
+                                        newPersonCount = 20.coerceAtMost(remainingToAssign)
+                                    }
+                                },
+                                onRemoveAllocation = { index ->
+                                    if (index in allocations.indices) {
+                                        allocations.removeAt(index)
+                                    }
+                                },
+                                onCreateRoom = {
+                                    val name = if (roomTitle.isNotBlank()) roomTitle.trim() else "Custom Amal"
+                                    distributionViewModel.saveDistribution(
+                                        name = name,
+                                        type = DistributionType.AMAL,
+                                        roomMode = RoomMode.LOCAL,
+                                        totalTarget = totalTarget,
+                                        allocations = allocations,
+                                        existingId = distributionId
+                                    ) { savedId ->
+                                        onSaved(savedId)
+                                    }
+                                },
+                                onBack = onStep3Back
+                            )
+                        }
+                    }
+                } else {
+                    // Online Room Setup
+                    if (selectedType == DistributionType.AMAL) {
+                        OnlineAmalSetup(
+                            amalName = roomTitle,
+                            onAmalNameChange = { roomTitle = it },
+                            totalTarget = totalTarget,
+                            onTotalTargetChange = { totalTarget = it },
+                            onCreateRoom = {
+                                val name = if (roomTitle.isNotBlank()) roomTitle.trim() else "Custom Amal"
+                                distributionViewModel.saveDistribution(
+                                    name = name,
+                                    type = DistributionType.AMAL,
+                                    roomMode = RoomMode.ONLINE,
+                                    totalTarget = totalTarget,
+                                    allocations = emptyList(),
+                                    existingId = distributionId
+                                ) { savedId ->
+                                    onSaved(savedId)
+                                }
+                            },
+                            onBack = onStep3Back
+                        )
+                    } else {
+                        OnlineKhatmSetup(
+                            title = roomTitle,
+                            onTitleChange = { roomTitle = it },
+                            type = selectedType,
+                            onCreateRoom = {
+                                val defaultName = if (selectedType == DistributionType.ONE_TIME_KHATM) "One-Time Khatm" else "Monthly Khatm"
+                                val name = if (roomTitle.isNotBlank()) roomTitle.trim() else defaultName
+                                distributionViewModel.saveDistribution(
+                                    name = name,
+                                    type = selectedType,
+                                    roomMode = RoomMode.ONLINE,
+                                    totalTarget = 30,
+                                    allocations = emptyList(),
+                                    existingId = distributionId
+                                ) { savedId ->
+                                    onSaved(savedId)
+                                }
+                            },
+                            onBack = onStep3Back
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// STEP 1: "Where will it take place?" (1 of 2)
+// =========================================================================
+@Composable
+private fun Step1RoomType(
+    selectedMode: RoomMode,
+    onSelectMode: (RoomMode) -> Unit,
+    onContinue: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        TopRightStepBubble(softNeutral = colors.softNeutral)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
+
+                    Text(
+                        text = "1 of 2",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Text(
+                    text = "NEW DISTRIBUTION",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Where will it\ntake place?",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                // Option: Online room
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelectMode(RoomMode.ONLINE) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    OverlappingCirclesVector(
+                        modifier = Modifier.size(width = 68.dp, height = 54.dp),
+                        colors = colors
+                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isOnlineMode) "ONLINE ROOM • GOLD GLOW" else "LOCAL SCHEDULE • BLUE GLOW",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.7.sp,
-                                fontSize = 10.sp
-                            ),
-                            color = activeAccent
+                            text = "Online room",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 22.sp,
+                            color = colors.text
                         )
+
                         Spacer(modifier = Modifier.height(2.dp))
+
                         Text(
-                            text = when {
-                                hasAttemptedSave && validationErrors.isNotEmpty() ->
-                                    "⚠️ ${validationErrors.size} ${if (validationErrors.size == 1) "Requirement" else "Requirements"} Missing"
-                                isOnlineMode && !isEditMode -> {
-                                    if (distributionName.isBlank()) {
-                                        "Room Title Required *"
-                                    } else if (hostWantsInitialClaim && hostClaimName.isNotBlank()) {
-                                        "Passcode Room + Initial Claim by ${hostClaimName.trim()}"
-                                    } else {
-                                        "Ready to create Passcode & QR Room"
-                                    }
-                                }
-                                !isOnlineMode -> {
-                                    val unitName = if (isAmalMode) "Recitations" else "Paras"
-                                    "$currentSum / $effectiveTarget $unitName Named (${allocations.size} ${if (allocations.size == 1) "Person" else "People"})"
-                                }
-                                else -> "${allocations.size} Members"
-                            },
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = if (hasAttemptedSave && validationErrors.isNotEmpty()) {
-                                MaterialTheme.colorScheme.error
-                            } else if (!isOnlineMode && currentSum != effectiveTarget) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            }
+                            text = "Share a code. Friends join from anywhere.",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = colors.mutedText
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    PrimarySanctuaryButton(
-                        text = when {
-                            !isValidToSave && hasAttemptedSave -> "Fix Requirements"
-                            isEditMode -> "Save Changes"
-                            isOnlineMode -> "Create Online Room"
-                            else -> "Create Schedule"
-                        },
-                        icon = if (isValidToSave) Icons.Default.Check else Icons.Default.ErrorOutline,
-                        onClick = {
-                            if (!isValidToSave) {
-                                hasAttemptedSave = true
-                                val firstErr = validationErrors.firstOrNull() ?: "Please complete all compulsory fields"
-                                Toast.makeText(context, firstErr, Toast.LENGTH_SHORT).show()
-                            } else {
-                                val finalAllocations = if (isOnlineMode && !isEditMode) {
-                                    if (hostWantsInitialClaim && hostClaimName.trim().isNotBlank()) {
-                                        val c = if (isAmalMode) {
-                                            (hostClaimCountText.toIntOrNull() ?: 1).coerceIn(1, effectiveTarget.coerceAtLeast(1))
-                                        } else {
-                                            hostClaimCount.coerceIn(1, 30)
-                                        }
-                                        val activeParas = if (isAmalMode) emptyList() else hostSelectedParas.ifEmpty { listOf(1) }
-                                        listOf(
-                                            ParticipantAllocation(
-                                                id = 0L,
-                                                name = hostClaimName.trim(),
-                                                count = if (isAmalMode) c else activeParas.size,
-                                                displayOrder = activeParas.firstOrNull() ?: 1,
-                                                specificParas = activeParas
-                                            )
-                                        )
-                                    } else {
-                                        emptyList()
-                                    }
-                                } else {
-                                    allocations.toList()
-                                }
-
-                                distributionViewModel.saveDistribution(
-                                    name = distributionName.trim(),
-                                    type = selectedType,
-                                    roomMode = selectedRoomMode,
-                                    totalTarget = effectiveTarget.coerceAtLeast(1),
-                                    allocations = finalAllocations,
-                                    existingId = if (isEditMode) distributionId else null,
-                                    onSaved = onSaved
-                                )
-                            }
-                        },
-                        modifier = Modifier
-                            .width(205.dp)
-                            .testTag("save_distribution_button")
-                    )
+                    if (selectedMode == RoomMode.ONLINE) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = colors.pineText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.2.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Option: Local room
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelectMode(RoomMode.LOCAL) }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ArchWindowVector(
+                        modifier = Modifier.size(width = 54.dp, height = 64.dp),
+                        outlineColor = colors.gold,
+                        strokeWidth = 1.6.dp
+                    )
+
+                    Spacer(modifier = Modifier.width(22.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Local room",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 22.sp,
+                            color = colors.text
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = "For a masjid or gathering. Paras are claimed in person.",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = colors.mutedText
+                        )
+                    }
+
+                    if (selectedMode == RoomMode.LOCAL) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = colors.pineText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                WaveDivider(
+                    color = colors.rules,
+                    strokeWidth = 1.dp,
+                    amplitude = 1.5.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
-        },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background,
+
+            // Continue Button
+            Button(
+                onClick = onContinue,
+                shape = RoundedCornerShape(26.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.pine,
+                    contentColor = Color(0xFFF1EBDD)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("step1_continue_button")
+            ) {
+                Text(
+                    text = "Continue →",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
+            }
+        }
+    }
+}
+
+// =========================================================================
+// STEP 2: "What will you recite?" (2 of 2)
+// =========================================================================
+@Composable
+private fun Step2DistributionType(
+    roomMode: RoomMode,
+    selectedType: DistributionType,
+    onSelectType: (DistributionType) -> Unit,
+    onChangeMode: () -> Unit,
+    onContinue: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+    val modeLabel = if (roomMode == RoomMode.ONLINE) "Online room" else "Local room"
+
+    Box(
         modifier = modifier
-    ) { innerPadding ->
-        BoxWithConstraints(
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        TopRightStepBubble(softNeutral = colors.softNeutral)
+
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            val horizontalPad = if (maxWidth >= 640.dp) 28.dp else 20.dp
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
 
-            // Compute running startPara for each person in Local Qur'an rooms so user sees exact Paras at setup!
-            val runningStartParas = remember(allocations.toList()) {
-                val starts = mutableListOf<Int>()
-                var cursor = 1
-                allocations.forEach { item ->
-                    starts.add(cursor)
-                    cursor += item.count
+                    Text(
+                        text = "2 of 2",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
                 }
-                starts
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Text(
+                    text = "NEW DISTRIBUTION",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "What will you\nrecite?",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "$modeLabel · ",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText
+                    )
+                    Text(
+                        text = "change",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        textDecoration = TextDecoration.Underline,
+                        color = colors.pineText,
+                        modifier = Modifier.clickable { onChangeMode() }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(36.dp))
+
+                // Option 1: Monthly Quran khatm
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelectType(DistributionType.KHATM) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BeadedCircleVector(
+                        modifier = Modifier.size(60.dp),
+                        totalBeads = 30,
+                        completedBeads = 0,
+                        goldColor = colors.gold,
+                        pineColor = colors.pine
+                    )
+
+                    Spacer(modifier = Modifier.width(18.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Monthly Quran khatm",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 21.sp,
+                            color = colors.text
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = "A new 30-para round every month, same group.",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = colors.mutedText
+                        )
+                    }
+
+                    if (selectedType == DistributionType.KHATM) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = colors.pineText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                WaveDivider(
+                    color = colors.rules,
+                    strokeWidth = 1.dp,
+                    amplitude = 1.5.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Option 2: One-time Quran
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelectType(DistributionType.ONE_TIME_KHATM) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ArchWindowVector(
+                        modifier = Modifier.size(width = 54.dp, height = 64.dp),
+                        outlineColor = colors.gold,
+                        strokeWidth = 1.6.dp
+                    )
+
+                    Spacer(modifier = Modifier.width(22.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "One-time Quran",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 21.sp,
+                            color = colors.text
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = "One 30-para khatm, then the room closes.",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = colors.mutedText
+                        )
+                    }
+
+                    if (selectedType == DistributionType.ONE_TIME_KHATM) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = colors.pineText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.2.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Option 3: Amal
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onSelectType(DistributionType.AMAL) }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ConcentricCirclesVector(
+                        modifier = Modifier.size(60.dp),
+                        pineColor = colors.pine,
+                        strokeColor = colors.gold
+                    )
+
+                    Spacer(modifier = Modifier.width(18.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Amal",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 21.sp,
+                            color = colors.text
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = "Count recitations toward a target, like Yaseen × 100.",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = colors.mutedText
+                        )
+                    }
+
+                    if (selectedType == DistributionType.AMAL) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = colors.pineText,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                WaveDivider(
+                    color = colors.rules,
+                    strokeWidth = 1.dp,
+                    amplitude = 1.5.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
-            LazyColumn(
-                contentPadding = PaddingValues(
-                    start = horizontalPad,
-                    end = horizontalPad,
-                    top = 18.dp,
-                    bottom = 110.dp
+            // Create Room / Continue Button
+            Button(
+                onClick = onContinue,
+                shape = RoundedCornerShape(26.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.pine,
+                    contentColor = Color(0xFFF1EBDD)
                 ),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("step2_continue_button")
             ) {
-                // 1. Glowing Mode & Format Summary Banner (with optional expandable switcher)
-                item(key = "wizard_mode_summary_card") {
-                    Surface(
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.6.dp, activeAccent.copy(alpha = 0.7f)),
-                        tonalElevation = 4.dp,
+                Text(
+                    text = "Create room →",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
+            }
+        }
+    }
+}
+
+// =========================================================================
+// LOCAL SETUP: One-Time Khatm ("Set up the assignments")
+// =========================================================================
+@Composable
+private fun LocalOneTimeSetup(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    allocations: List<ParticipantAllocation>,
+    totalTarget: Int,
+    newPersonName: String,
+    onNewPersonNameChange: (String) -> Unit,
+    newPersonCount: Int,
+    onNewPersonCountChange: (Int) -> Unit,
+    onAddPerson: () -> Unit,
+    onRemoveAllocation: (Int) -> Unit,
+    onCreateRoom: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+    val totalAssigned = allocations.sumOf { it.count }
+    val remaining = (totalTarget - totalAssigned).coerceAtLeast(0)
+    val isComplete = totalAssigned == totalTarget
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
+
+                    Text(
+                        text = "LOCAL",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.sp,
+                        color = colors.mutedText
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Set up the\nassignments",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = "ONE-TIME KHATM TITLE",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                BasicTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    textStyle = TextStyle(
+                        fontFamily = FrauncesFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 24.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (title.isEmpty()) {
+                            Text(
+                                text = "e.g. Khatm for Family",
+                                fontFamily = FrauncesFontFamily,
+                                fontSize = 24.sp,
+                                color = colors.mutedText.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.6.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "A descriptive name for your group",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Progress line: 5 / 30 paras assigned, 25 remaining
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$totalAssigned / $totalTarget",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 38.sp,
+                            color = colors.text
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "paras assigned",
+                            fontFamily = InterFontFamily,
+                            fontSize = 14.sp,
+                            color = colors.mutedText,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "$remaining remaining",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Wavy progress track
+                WaveTrack(
+                    progress = (totalAssigned.toFloat() / totalTarget.toFloat()).coerceIn(0f, 1f),
+                    pineColor = colors.pine,
+                    trackColor = colors.rules
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "ADDED SO FAR",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+            }
+
+            // Real participants added so far (clean empty state if none yet)
+            if (allocations.isEmpty()) {
+                item {
+                    Text(
+                        text = "No participants added yet. Enter names below to assign portions.",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
+            } else {
+                itemsIndexed(allocations) { index, alloc ->
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .shadow(
-                                elevation = 10.dp,
-                                shape = RoundedCornerShape(24.dp),
-                                ambientColor = activeGlow,
-                                spotColor = activeGlow
-                            )
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            activeAccent.copy(alpha = 0.12f),
-                                            Color.Transparent
-                                        )
-                                    )
-                                )
-                                .padding(22.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(activeAccent.copy(alpha = 0.2f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isOnlineMode) Icons.Default.Public else Icons.Default.Smartphone,
-                                            contentDescription = null,
-                                            tint = activeAccent,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-
-                                    Column {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = activeAccent.copy(alpha = 0.16f)
-                                        ) {
-                                            Text(
-                                                text = if (isOnlineMode) "ONLINE ROOM • GOLD GLOW" else "LOCAL ROOM • BLUE GLOW",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    letterSpacing = 0.6.sp,
-                                                    fontSize = 10.sp
-                                                ),
-                                                color = activeAccent,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = when (selectedType) {
-                                                DistributionType.KHATM -> "Monthly Rotating 30-Para Khatm"
-                                                DistributionType.ONE_TIME_KHATM -> "One-Time 30-Para Qur'an Khatm"
-                                                DistributionType.AMAL -> "Custom Amal Target Distribution"
-                                            },
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 17.sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-
-                                if (!isEditMode) {
-                                    Surface(
-                                        onClick = { showModeSwitcherInForm = !showModeSwitcherInForm },
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant)
-                                    ) {
-                                        Text(
-                                            text = if (showModeSwitcherInForm) "Hide Options" else "Change",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                                        )
-                                    }
-                                }
-                            }
-
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isOnlineMode) {
-                                    "Instant Online Setup: Name your room below and create it. You'll get a unique Passcode & QR Code so members can join from their own phones and claim their own portions."
-                                } else {
-                                    "Local Coordinator Setup: Name each person in your group right below and assign their Paras or Amal counts now. You can share the formatted schedule anytime."
-                                },
-                                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = alloc.name,
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = colors.text
                             )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            val paraRange = if (alloc.specificParas.isNotEmpty()) {
+                                "Paras ${alloc.specificParas.first()}–${alloc.specificParas.last()}"
+                            } else "${alloc.count} paras"
+                            Text(
+                                text = "${alloc.count} paras · $paraRange",
+                                fontFamily = InterFontFamily,
+                                fontSize = 13.sp,
+                                color = colors.mutedText
+                            )
+                        }
 
-                            // Expandable Spacious Mode & Type Switcher (if user taps "Change")
-                            AnimatedVisibility(visible = showModeSwitcherInForm && !isEditMode) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        IconButton(
+                            onClick = { onRemoveAllocation(index) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove",
+                                tint = colors.mutedText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
-                                    Text(
-                                        text = "1. ROOM STYLE",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.8.sp
-                                        ),
-                                        color = activeAccent
-                                    )
+            // NAME A PERSON Section
+            item {
+                Spacer(modifier = Modifier.height(10.dp))
 
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        SpaciousSetupOptionCard(
-                                            title = "Online Room (Gold Glow • Passcode Sync)",
-                                            subtitle = "Members join via Passcode/QR and claim their own share",
-                                            selected = selectedRoomMode == RoomMode.ONLINE,
-                                            accentColor = OnlineGoldAccent,
-                                            onClick = { selectedRoomMode = RoomMode.ONLINE }
-                                        )
-                                        SpaciousSetupOptionCard(
-                                            title = "Local Room (Blue Glow • Name Roster Now)",
-                                            subtitle = "You name each person and assign their share during setup",
-                                            selected = selectedRoomMode == RoomMode.LOCAL,
-                                            accentColor = LocalBlueAccent,
-                                            onClick = { selectedRoomMode = RoomMode.LOCAL }
-                                        )
-                                    }
+                Text(
+                    text = "NAME A PERSON",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
 
-                                    Text(
-                                        text = "2. DISTRIBUTION TYPE",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.8.sp
-                                        ),
-                                        color = activeAccent
-                                    )
+                Spacer(modifier = Modifier.height(8.dp))
 
-                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        SpaciousSetupOptionCard(
-                                            title = "Monthly Qur'an Khatm (30 Paras)",
-                                            subtitle = "Rotates everyone's contiguous Paras automatically every month",
-                                            selected = selectedType == DistributionType.KHATM,
-                                            accentColor = activeAccent,
-                                            onClick = {
-                                                selectedType = DistributionType.KHATM
-                                                totalTargetText = "30"
-                                            }
-                                        )
-                                        SpaciousSetupOptionCard(
-                                            title = "One-Time Qur'an Khatm (30 Paras)",
-                                            subtitle = "Complete all 30 Paras once for a special occasion",
-                                            selected = selectedType == DistributionType.ONE_TIME_KHATM,
-                                            accentColor = activeAccent,
-                                            onClick = {
-                                                selectedType = DistributionType.ONE_TIME_KHATM
-                                                totalTargetText = "30"
-                                            }
-                                        )
-                                        SpaciousSetupOptionCard(
-                                            title = "Custom Amal (Target Count)",
-                                            subtitle = "Surah Yaseen, Salawat, Tasbih, or custom recitation goal",
-                                            selected = selectedType == DistributionType.AMAL,
-                                            accentColor = activeAccent,
-                                            onClick = {
-                                                selectedType = DistributionType.AMAL
-                                                if (totalTargetText == "30") totalTargetText = "110"
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                BasicTextField(
+                    value = newPersonName,
+                    onValueChange = onNewPersonNameChange,
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (newPersonName.isEmpty()) {
+                            Text(
+                                text = "Person's name",
+                                fontFamily = InterFontFamily,
+                                fontSize = 16.sp,
+                                color = colors.mutedText.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.4.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Quick choice pills: 1 Para, 2 Paras, 3 Paras, 5 Paras, Remaining (X)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(1, 2, 3, 5).forEach { count ->
+                        val isSelected = newPersonCount == count
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (isSelected) colors.pine else Color.Transparent)
+                                .border(1.2.dp, if (isSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                                .clickable { onNewPersonCountChange(count) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "$count ${if (count == 1) "Para" else "Paras"}",
+                                fontFamily = InterFontFamily,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp,
+                                color = if (isSelected) Color(0xFFF1EBDD) else colors.text
+                            )
                         }
                     }
                 }
 
-                // 2. Session Title & Target Count Card
-                item(key = "session_identity_card") {
-                    Surface(
-                        shape = RoundedCornerShape(22.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.fillMaxWidth()
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (remaining > 0) {
+                    val isRemainingSelected = newPersonCount == remaining
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (isRemainingSelected) colors.pine else Color.Transparent)
+                            .border(1.2.dp, if (isRemainingSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                            .clickable { onNewPersonCountChange(remaining) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(22.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text(
-                                text = if (isOnlineMode) "Online Room Details" else "Local Schedule Details",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            val isNameError = hasAttemptedSave && distributionName.trim().isBlank()
-
-                            AnimatedVisibility(visible = hasAttemptedSave && validationErrors.isNotEmpty()) {
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
-                                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.error),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("form_validation_error_banner")
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.ErrorOutline,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Text(
-                                                text = "Form Incomplete • Action Required:",
-                                                style = MaterialTheme.typography.titleSmall.copy(
-                                                    fontWeight = FontWeight.Bold
-                                                ),
-                                                color = MaterialTheme.colorScheme.onErrorContainer
-                                            )
-                                        }
-                                        validationErrors.forEach { errorMsg ->
-                                            Row(
-                                                verticalAlignment = Alignment.Top,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                Text(
-                                                    text = "•",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                                        fontWeight = FontWeight.Bold
-                                                    ),
-                                                    color = MaterialTheme.colorScheme.error
-                                                )
-                                                Text(
-                                                    text = errorMsg,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = distributionName,
-                                onValueChange = {
-                                    distributionName = it
-                                    if (it.isNotBlank()) hasAttemptedSave = false
-                                },
-                                label = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            when {
-                                                isAmalMode -> "Amal Name"
-                                                isOneTimeKhatmMode -> "One-Time Khatm Title"
-                                                else -> "Monthly Khatm Title"
-                                            }
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("*", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.ExtraBold)
-                                    }
-                                },
-                                placeholder = {
-                                    Text(
-                                        when {
-                                            isAmalMode -> "e.g. Friday Salawat Circle (Compulsory)"
-                                            isOneTimeKhatmMode -> "e.g. Blessed Ramadan Khatm (Compulsory)"
-                                            else -> "e.g. Household Monthly Khatm (Compulsory)"
-                                        }
-                                    )
-                                },
-                                isError = isNameError,
-                                supportingText = {
-                                    if (isNameError) {
-                                        Text(
-                                            text = "Room Title is compulsory. Please enter a name to continue.",
-                                            color = MaterialTheme.colorScheme.error,
-                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
-                                        )
-                                    } else {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = activeAccent.copy(alpha = 0.16f)
-                                            ) {
-                                                Text(
-                                                    text = "COMPULSORY *",
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 9.sp,
-                                                        letterSpacing = 0.5.sp
-                                                    ),
-                                                    color = activeAccent,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "A descriptive name for your group",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                },
-                                trailingIcon = {
-                                    if (isNameError) {
-                                        Icon(
-                                            imageVector = Icons.Default.ErrorOutline,
-                                            contentDescription = "Room name is required",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    } else if (distributionName.trim().isNotBlank()) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = "Valid name",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(
-                                    capitalization = KeyboardCapitalization.Words,
-                                    imeAction = ImeAction.Next
-                                ),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = activeAccent,
-                                    unfocusedBorderColor = if (isNameError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
-                                    errorBorderColor = MaterialTheme.colorScheme.error,
-                                    focusedContainerColor = MaterialTheme.colorScheme.background,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.background
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("distribution_name_input")
-                            )
-
-                            if (isAmalMode) {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedTextField(
-                                        value = totalTargetText,
-                                        onValueChange = { valClean ->
-                                            if (valClean.all { it.isDigit() } && valClean.length <= 7) {
-                                                totalTargetText = valClean
-                                            }
-                                        },
-                                        label = { Text("Total Target Recitations") },
-                                        placeholder = { Text("e.g. 110, 313, 1000") },
-                                        singleLine = true,
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = KeyboardType.Number,
-                                            imeAction = ImeAction.Done
-                                        ),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = activeAccent,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                            focusedContainerColor = MaterialTheme.colorScheme.background,
-                                            unfocusedContainerColor = MaterialTheme.colorScheme.background
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("amal_target_input")
-                                    )
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState())
-                                    ) {
-                                        Text(
-                                            text = "Presets:",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        listOf(40, 100, 110, 313, 1000).forEach { preset ->
-                                            val selected = effectiveTarget == preset
-                                            FilterChip(
-                                                selected = selected,
-                                                onClick = { totalTargetText = preset.toString() },
-                                                label = {
-                                                    Text(
-                                                        text = preset.toString(),
-                                                        style = MaterialTheme.typography.labelSmall.copy(
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    )
-                                                },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = activeAccent.copy(alpha = 0.2f),
-                                                    selectedLabelColor = activeAccent
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        Text(
+                            text = "Remaining ($remaining)",
+                            fontFamily = InterFontFamily,
+                            fontWeight = if (isRemainingSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = if (isRemainingSelected) Color(0xFFF1EBDD) else colors.text
+                        )
                     }
                 }
 
-                // 3A. ONLINE ROOM EXPERIENCE (When creating a new Online Room)
-                if (isOnlineMode && !isEditMode) {
-                    item(key = "online_room_passcode_preview_card") {
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.2.dp, OnlineGoldAccent.copy(alpha = 0.55f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(22.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(OnlineGoldAccent.copy(alpha = 0.16f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.QrCode2,
-                                            contentDescription = null,
-                                            tint = OnlineGoldAccent,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Self-Service Member Claiming",
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "No need to type everyone's name yourself",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
+                Spacer(modifier = Modifier.height(20.dp))
 
-                                Text(
-                                    text = when (selectedType) {
-                                        DistributionType.ONE_TIME_KHATM ->
-                                            "All 30 Paras will open inside your Online Room. Share the generated Passcode or QR Code on WhatsApp so members can pick their own Para(s) first-come, first-served."
-                                        DistributionType.KHATM ->
-                                            "Members join with your Room Passcode or QR Code to claim their monthly Para count, or you can add elderly guests inside the room."
-                                        DistributionType.AMAL ->
-                                            "Members join with your Room Passcode or QR Code, pledge how many recitations they'll read, and use the built-in tactile counter."
-                                    },
-                                    style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                                // Optional Host Self-Claim Toggle
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Claim my own share now (Optional)",
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "Pre-claim your own portion as the room creator",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Switch(
-                                        checked = hostWantsInitialClaim,
-                                        onCheckedChange = { hostWantsInitialClaim = it },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
-                                            checkedTrackColor = OnlineGoldAccent
-                                        )
-                                    )
-                                }
-
-                                AnimatedVisibility(visible = hostWantsInitialClaim) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(top = 6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        val isHostClaimNameError = hasAttemptedSave && hostClaimName.trim().isBlank()
-
-                                        OutlinedTextField(
-                                            value = hostClaimName,
-                                            onValueChange = { hostClaimName = it },
-                                            label = {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text("Your Display Name")
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("*", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.ExtraBold)
-                                                }
-                                            },
-                                            placeholder = { Text("e.g. Abbas (Compulsory)") },
-                                            isError = isHostClaimNameError,
-                                            supportingText = {
-                                                if (isHostClaimNameError) {
-                                                    Text(
-                                                        text = "Display name is compulsory when pre-claiming a share",
-                                                        color = MaterialTheme.colorScheme.error,
-                                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        text = "Shown on your assigned Para / Recitation share",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            },
-                                            trailingIcon = {
-                                                if (isHostClaimNameError) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.ErrorOutline,
-                                                        contentDescription = "Name required",
-                                                        tint = MaterialTheme.colorScheme.error
-                                                    )
-                                                } else if (hostClaimName.trim().isNotBlank()) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.CheckCircle,
-                                                        contentDescription = "Valid",
-                                                        tint = MaterialTheme.colorScheme.primary
-                                                    )
-                                                }
-                                            },
-                                            singleLine = true,
-                                            shape = RoundedCornerShape(14.dp),
-                                            modifier = Modifier.fillMaxWidth(),
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedBorderColor = OnlineGoldAccent,
-                                                unfocusedBorderColor = if (isHostClaimNameError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
-                                                errorBorderColor = MaterialTheme.colorScheme.error,
-                                                focusedContainerColor = MaterialTheme.colorScheme.background,
-                                                unfocusedContainerColor = MaterialTheme.colorScheme.background
-                                            )
-                                        )
-
-                                        if (isAmalMode) {
-                                            OutlinedTextField(
-                                                value = hostClaimCountText,
-                                                onValueChange = { v ->
-                                                    if (v.all { it.isDigit() } && v.length <= 6) {
-                                                        hostClaimCountText = v
-                                                    }
-                                                },
-                                                label = { Text("Your Recitation Share") },
-                                                singleLine = true,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                shape = RoundedCornerShape(14.dp),
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        } else {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState())
-                                            ) {
-                                                Text(
-                                                    text = "Your Paras:",
-                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    softWrap = false
-                                                )
-
-                                                FilterChip(
-                                                    selected = hostClaimCount == 1,
-                                                    onClick = { hostClaimCount = 1 },
-                                                    label = {
-                                                        Text(
-                                                            "1 Para",
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            softWrap = false
-                                                        )
-                                                    },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = OnlineGoldAccent.copy(alpha = 0.2f),
-                                                        selectedLabelColor = OnlineGoldAccent
-                                                    )
-                                                )
-
-                                                FilterChip(
-                                                    selected = hostClaimCount == 2,
-                                                    onClick = {
-                                                        hostClaimCount = 2
-                                                        hostSelectedParas = listOf(1, 2)
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            "2 Paras",
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            softWrap = false
-                                                        )
-                                                    },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = OnlineGoldAccent.copy(alpha = 0.2f),
-                                                        selectedLabelColor = OnlineGoldAccent
-                                                    )
-                                                )
-
-                                                val isCustomSelected = hostClaimCount >= 3 || (hostSelectedParas.isNotEmpty() && hostSelectedParas != listOf(1) && hostSelectedParas != listOf(1, 2))
-                                                FilterChip(
-                                                    selected = isCustomSelected,
-                                                    onClick = { showHostParaPickerDialog = true },
-                                                    leadingIcon = {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Add,
-                                                            contentDescription = "Select specific Paras",
-                                                            modifier = Modifier.size(16.dp)
-                                                        )
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            text = if (hostSelectedParas.size == 1 && hostSelectedParas.first() != 1) "Para ${hostSelectedParas.first()}"
-                                                                else if (isCustomSelected) "${hostSelectedParas.size} Paras" else "Pick Para",
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            softWrap = false
-                                                        )
-                                                    },
-                                                    colors = FilterChipDefaults.filterChipColors(
-                                                        selectedContainerColor = OnlineGoldAccent.copy(alpha = 0.2f),
-                                                        selectedLabelColor = OnlineGoldAccent
-                                                    )
-                                                )
-                                            }
-
-                                            if (showHostParaPickerDialog) {
-                                                var dialogSelectedParas by remember(hostSelectedParas) {
-                                                    mutableStateOf(hostSelectedParas.ifEmpty { listOf(1) }.toSet())
-                                                }
-
-                                                Dialog(
-                                                    onDismissRequest = { showHostParaPickerDialog = false },
-                                                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                                                ) {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(24.dp),
-                                                        color = MaterialTheme.colorScheme.background,
-                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                        tonalElevation = 8.dp,
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(horizontal = 18.dp, vertical = 20.dp)
-                                                            .widthIn(max = 500.dp)
-                                                    ) {
-                                                        Column(
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .verticalScroll(rememberScrollState())
-                                                                .padding(22.dp),
-                                                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                                                         ) {
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                Column(modifier = Modifier.weight(1f)) {
-                                                                    Text(
-                                                                        text = "Select Your Paras",
-                                                                        style = MaterialTheme.typography.titleLarge.copy(
-                                                                            fontWeight = FontWeight.Bold,
-                                                                            fontSize = 20.sp
-                                                                        ),
-                                                                        color = MaterialTheme.colorScheme.onSurface
-                                                                    )
-                                                                    Spacer(modifier = Modifier.height(2.dp))
-                                                                    Text(
-                                                                        text = "Pick the exact Para(s) you wish to recite",
-                                                                        style = MaterialTheme.typography.bodySmall,
-                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                    )
-                                                                }
-
-                                                                Surface(
-                                                                    onClick = { showHostParaPickerDialog = false },
-                                                                    shape = RoundedCornerShape(10.dp),
-                                                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                                                                    modifier = Modifier.size(36.dp)
-                                                                ) {
-                                                                    Box(contentAlignment = Alignment.Center) {
-                                                                        Icon(
-                                                                            imageVector = Icons.Default.Close,
-                                                                            contentDescription = "Close",
-                                                                            tint = MaterialTheme.colorScheme.onSurface,
-                                                                            modifier = Modifier.size(18.dp)
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            // Status Banner
-                                                            Surface(
-                                                                shape = RoundedCornerShape(14.dp),
-                                                                color = OnlineGoldAccent.copy(alpha = 0.12f),
-                                                                border = BorderStroke(1.dp, OnlineGoldAccent.copy(alpha = 0.35f)),
-                                                                modifier = Modifier.fillMaxWidth()
-                                                            ) {
-                                                                Row(
-                                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                                                    verticalAlignment = Alignment.CenterVertically,
-                                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                                ) {
-                                                                    Text(
-                                                                        text = "Selected Share:",
-                                                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                                        color = MaterialTheme.colorScheme.onSurface
-                                                                    )
-                                                                    Text(
-                                                                        text = if (dialogSelectedParas.size == 1) "Para ${dialogSelectedParas.first()}" else "${dialogSelectedParas.size} Paras (${dialogSelectedParas.sorted().joinToString(", ")})",
-                                                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                                                        color = OnlineGoldAccent
-                                                                    )
-                                                                }
-                                                            }
-
-                                                            // 30-Para Selection Grid Table
-                                                            FlowRow(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                                                            ) {
-                                                                for (para in 1..30) {
-                                                                    val isSelected = para in dialogSelectedParas
-
-                                                                    Surface(
-                                                                        onClick = {
-                                                                            dialogSelectedParas = if (isSelected) {
-                                                                                if (dialogSelectedParas.size > 1) dialogSelectedParas - para else dialogSelectedParas
-                                                                            } else {
-                                                                                dialogSelectedParas + para
-                                                                            }
-                                                                        },
-                                                                        shape = RoundedCornerShape(10.dp),
-                                                                        color = if (isSelected) OnlineGoldAccent else MaterialTheme.colorScheme.surface,
-                                                                        border = BorderStroke(
-                                                                            width = 1.dp,
-                                                                            color = if (isSelected) OnlineGoldAccent else MaterialTheme.colorScheme.outlineVariant
-                                                                        ),
-                                                                        modifier = Modifier.size(44.dp)
-                                                                    ) {
-                                                                        Box(contentAlignment = Alignment.Center) {
-                                                                            Text(
-                                                                                text = "$para",
-                                                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                                                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
-                                                                            )
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                                            ) {
-                                                                SecondaryEditorialButton(
-                                                                    text = "Cancel",
-                                                                    onClick = { showHostParaPickerDialog = false },
-                                                                    modifier = Modifier.weight(1f)
-                                                                )
-                                                                PrimarySanctuaryButton(
-                                                                    text = "Confirm (${dialogSelectedParas.size})",
-                                                                    icon = Icons.Default.Check,
-                                                                    onClick = {
-                                                                        hostSelectedParas = dialogSelectedParas.toList().sorted()
-                                                                        hostClaimCount = hostSelectedParas.size.coerceIn(1, 30)
-                                                                        showHostParaPickerDialog = false
-                                                                    },
-                                                                    modifier = Modifier.weight(1f)
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // 3B. LOCAL ROOM FULL ROSTER SETUP (Or Editing an Existing Room)
-                    item(key = "local_allocation_tracker_card") {
-                        val progress = if (effectiveTarget > 0) {
-                            (currentSum.toFloat() / effectiveTarget.toFloat()).coerceIn(0f, 1f)
-                        } else 0f
-
-                        val statusColor = when {
-                            effectiveTarget <= 0 -> MaterialTheme.colorScheme.error
-                            currentSum == effectiveTarget -> MaterialTheme.colorScheme.primary
-                            currentSum > effectiveTarget -> MaterialTheme.colorScheme.error
-                            else -> LocalBlueAccent
-                        }
-
-                        val unitLabel = if (isAmalMode) "Recitations" else "Paras"
-
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.3.dp, statusColor.copy(alpha = 0.55f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(22.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "STEP 2 • NAME & ASSIGN EVERY PERSON",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                letterSpacing = 0.8.sp
-                                            ),
-                                            color = statusColor
-                                        )
-                                        Spacer(modifier = Modifier.height(3.dp))
-                                        Text(
-                                            text = "$currentSum / $effectiveTarget $unitLabel Assigned",
-                                            style = MaterialTheme.typography.titleLarge.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 20.sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    Icon(
-                                        imageVector = if (currentSum == effectiveTarget && effectiveTarget > 0) {
-                                            Icons.Default.CheckCircle
-                                        } else {
-                                            Icons.Default.ErrorOutline
-                                        },
-                                        contentDescription = null,
-                                        tint = statusColor,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    color = statusColor,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(9.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                )
-
-                                Text(
-                                    text = when {
-                                        remainingUnits == 0 ->
-                                            "All $effectiveTarget $unitLabel are assigned! You're ready to save this Local Schedule."
-                                        remainingUnits > 0 ->
-                                            "Add people below until all $effectiveTarget $unitLabel are assigned ($remainingUnits remaining)."
-                                        else ->
-                                            "Over-allocated by ${-remainingUnits} $unitLabel. Reduce someone's share or tap Distribute Equally."
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                if (allocations.isNotEmpty() && currentSum != effectiveTarget && effectiveTarget >= allocations.size) {
-                                    SecondaryEditorialButton(
-                                        text = "Distribute All $effectiveTarget $unitLabel Equally (${allocations.size} People)",
-                                        icon = Icons.Default.AutoFixHigh,
-                                        onClick = distributeRemainingEquallyAction,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("distribute_equally_button")
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 4. Add Person Card for Local Room Setup
-                    item(key = "add_person_builder_card") {
-                        val nextStartPara = (currentSum + 1).coerceAtMost(30)
-                        val nextEndPara = (nextStartPara + newParticipantCount - 1).coerceAtMost(30)
-                        val paraPreviewBadge = if (!isAmalMode && currentSum < 30) {
-                            if (nextStartPara == nextEndPara) {
-                                "Will receive: Para $nextStartPara"
-                            } else {
-                                "Will receive: Paras $nextStartPara–$nextEndPara"
-                            }
-                        } else null
-
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.2.dp, LocalBlueAccent.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(22.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(LocalBlueAccent.copy(alpha = 0.16f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.PersonAdd,
-                                                contentDescription = null,
-                                                tint = LocalBlueAccent,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                        Text(
-                                            text = "Name a Person & Assign Share",
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    if (paraPreviewBadge != null) {
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = LocalBlueAccent.copy(alpha = 0.14f)
-                                        ) {
-                                            Text(
-                                                text = paraPreviewBadge,
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold
-                                                ),
-                                                color = LocalBlueAccent,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                OutlinedTextField(
-                                    value = newParticipantName,
-                                    onValueChange = {
-                                        newParticipantName = it
-                                        if (it.isNotBlank()) participantInputError = null
-                                    },
-                                    label = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("Person's Name")
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("*", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.ExtraBold)
-                                        }
-                                    },
-                                    placeholder = { Text("e.g. Abbas, Khadija, Dadi (Compulsory)") },
-                                    isError = participantInputError != null,
-                                    supportingText = {
-                                        if (participantInputError != null) {
-                                            Text(
-                                                text = participantInputError!!,
-                                                color = MaterialTheme.colorScheme.error,
-                                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
-                                            )
-                                        } else {
-                                            Text(
-                                                text = "Required: Enter the participant's name",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    },
-                                    trailingIcon = {
-                                        if (participantInputError != null) {
-                                            Icon(
-                                                imageVector = Icons.Default.ErrorOutline,
-                                                contentDescription = "Name required",
-                                                tint = MaterialTheme.colorScheme.error
-                                            )
-                                        } else if (newParticipantName.trim().isNotBlank()) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = "Valid",
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(
-                                        capitalization = KeyboardCapitalization.Words,
-                                        imeAction = ImeAction.Done
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onDone = { addLocalParticipantAction() }
-                                    ),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = LocalBlueAccent,
-                                        unfocusedBorderColor = if (participantInputError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant,
-                                        errorBorderColor = MaterialTheme.colorScheme.error,
-                                        focusedContainerColor = MaterialTheme.colorScheme.background,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.background
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("new_participant_name_input")
-                                )
-
-                                if (isAmalMode) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        OutlinedTextField(
-                                            value = newParticipantCountText,
-                                            onValueChange = { v ->
-                                                if (v.all { it.isDigit() } && v.length <= 6) {
-                                                    newParticipantCountText = v
-                                                }
-                                            },
-                                            label = { Text("Recitation Count") },
-                                            singleLine = true,
-                                            keyboardOptions = KeyboardOptions(
-                                                keyboardType = KeyboardType.Number,
-                                                imeAction = ImeAction.Done
-                                            ),
-                                            shape = RoundedCornerShape(14.dp),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .testTag("new_participant_amal_count_input")
-                                        )
-
-                                        if (remainingUnits > 0) {
-                                            SecondaryEditorialButton(
-                                                text = "Remaining ($remainingUnits)",
-                                                onClick = { newParticipantCountText = remainingUnits.toString() }
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    FlowRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        listOf(1, 2, 3, 5).forEach { countOption ->
-                                            FilterChip(
-                                                selected = newParticipantCount == countOption,
-                                                onClick = { newParticipantCount = countOption },
-                                                label = {
-                                                    Text(
-                                                        text = "$countOption ${if (countOption == 1) "Para" else "Paras"}",
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = LocalBlueAccent.copy(alpha = 0.2f),
-                                                    selectedLabelColor = LocalBlueAccent
-                                                )
-                                            )
-                                        }
-                                        if (remainingUnits in 1..30 && remainingUnits !in listOf(1, 2, 3, 5)) {
-                                            FilterChip(
-                                                selected = newParticipantCount == remainingUnits,
-                                                onClick = { newParticipantCount = remainingUnits },
-                                                label = {
-                                                    Text(
-                                                        text = "Remaining ($remainingUnits)",
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = LocalBlueAccent.copy(alpha = 0.2f),
-                                                    selectedLabelColor = LocalBlueAccent
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-
-                                PrimarySanctuaryButton(
-                                    text = "Add Person to Schedule",
-                                    icon = Icons.Default.Add,
-                                    enabled = newParticipantName.isNotBlank(),
-                                    onClick = addLocalParticipantAction,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("add_participant_button")
-                                )
-                            }
-                        }
-                    }
-
-                    // 5. Named Roster List Header
-                    item(key = "participants_roster_header") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Named Participants (${allocations.size})",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = if (isAmalMode) "Tap - / + to adjust count" else "Ascending Para order (1 → 30)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    if (allocations.isEmpty()) {
-                        item(key = "empty_participants_hint") {
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = if (isAmalMode) {
-                                        "No participants named yet. Add each person above until all $effectiveTarget recitations are assigned."
-                                    } else {
-                                        "No participants named yet. Add each reader above until all 30 Paras are assigned."
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(20.dp)
-                                )
-                            }
-                        }
-                    } else {
-                        itemsIndexed(
-                            items = allocations,
-                            key = { index, item -> "${item.name}_$index" }
-                        ) { index, item ->
-                            val startPara = runningStartParas.getOrElse(index) { 1 }
-                            val endPara = startPara + item.count - 1
-                            val paraRangePreview = if (!isAmalMode) {
-                                val list = (startPara..endPara).map { ((it - 1) % 30) + 1 }
-                                "Para ${list.joinToString(", ")}"
-                            } else {
-                                "${item.count} Recitations"
-                            }
-
-                            ParticipantAllocationRowCard(
-                                index = index + 1,
-                                allocation = item,
-                                paraPreviewLabel = paraRangePreview,
-                                isAmal = isAmalMode,
-                                maxCount = if (isAmalMode) effectiveTarget.coerceAtLeast(1000) else 30,
-                                accentColor = activeAccent,
-                                onIncrement = {
-                                    val maxAllowed = if (isAmalMode) 100000 else 30
-                                    if (item.count < maxAllowed) {
-                                        allocations[index] = item.copy(count = item.count + 1)
-                                    }
-                                },
-                                onDecrement = {
-                                    if (item.count > 1) {
-                                        allocations[index] = item.copy(count = item.count - 1)
-                                    }
-                                },
-                                onRemove = {
-                                    allocations.removeAt(index)
-                                }
-                            )
-                        }
-                    }
-                }
-
-                item(key = "bottom_ornament") {
-                    ManuscriptOrnamentDivider(
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SpaciousSetupOptionCard(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    accentColor: Color,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) accentColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.background,
-        border = BorderStroke(
-            width = if (selected) 1.8.dp else 1.dp,
-            color = if (selected) accentColor else MaterialTheme.colorScheme.outlineVariant
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (selected) {
-                Spacer(modifier = Modifier.width(10.dp))
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Selected",
-                    tint = accentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ParticipantAllocationRowCard(
-    index: Int,
-    allocation: ParticipantAllocation,
-    paraPreviewLabel: String,
-    isAmal: Boolean,
-    maxCount: Int,
-    accentColor: Color,
-    onIncrement: () -> Unit,
-    onDecrement: () -> Unit,
-    onRemove: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.38f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
+                // Add person to schedule + button (camel/gold pill)
+                Button(
+                    onClick = onAddPerson,
+                    enabled = newPersonName.isNotBlank() && remaining > 0,
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.gold,
+                        contentColor = Color(0xFF1B1B19),
+                        disabledContainerColor = colors.gold.copy(alpha = 0.35f),
+                        disabledContentColor = Color(0xFF1B1B19).copy(alpha = 0.45f)
+                    ),
                     modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .height(50.dp)
                 ) {
                     Text(
-                        text = index.toString(),
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = accentColor
+                        text = "Add person to schedule +",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "$totalAssigned / $totalTarget paras named · ${allocations.size} people",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Create room button
+                Button(
+                    onClick = onCreateRoom,
+                    enabled = isComplete,
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.pine,
+                        contentColor = Color(0xFFF1EBDD),
+                        disabledContainerColor = colors.softNeutral.copy(alpha = 0.7f),
+                        disabledContentColor = colors.mutedText.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
                     Text(
-                        text = allocation.name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = "Create room →",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
                     )
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+// =========================================================================
+// LOCAL SETUP: Monthly Khatm ("Set up the schedule")
+// =========================================================================
+@Composable
+private fun LocalMonthlySetup(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    allocations: List<ParticipantAllocation>,
+    totalTarget: Int,
+    newPersonName: String,
+    onNewPersonNameChange: (String) -> Unit,
+    newPersonCount: Int,
+    onNewPersonCountChange: (Int) -> Unit,
+    onAddPerson: () -> Unit,
+    onRemoveAllocation: (Int) -> Unit,
+    onCreateRoom: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+    val totalAssigned = allocations.sumOf { it.count }
+    val remaining = (totalTarget - totalAssigned).coerceAtLeast(0)
+    val isComplete = totalAssigned == totalTarget
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
+
                     Text(
-                        text = paraPreviewLabel,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = accentColor
+                        text = "LOCAL",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.sp,
+                        color = colors.mutedText
                     )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Set up the\nschedule",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = "MONTHLY KHATM TITLE",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                BasicTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    textStyle = TextStyle(
+                        fontFamily = FrauncesFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 24.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (title.isEmpty()) {
+                            Text(
+                                text = "e.g. Family Khatm",
+                                fontFamily = FrauncesFontFamily,
+                                fontSize = 24.sp,
+                                color = colors.mutedText.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.6.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "A descriptive name for your group",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$totalAssigned / $totalTarget",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 38.sp,
+                            color = colors.text
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "paras assigned",
+                            fontFamily = InterFontFamily,
+                            fontSize = 14.sp,
+                            color = colors.mutedText,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "$remaining remaining",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                WaveTrack(
+                    progress = (totalAssigned.toFloat() / totalTarget.toFloat()).coerceIn(0f, 1f),
+                    pineColor = colors.pine,
+                    trackColor = colors.rules
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "ADDED SO FAR",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+            }
+
+            if (allocations.isEmpty()) {
+                item {
+                    Text(
+                        text = "No participants added yet. Enter names below to assign portions.",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
+            } else {
+                itemsIndexed(allocations) { index, alloc ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = alloc.name,
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = colors.text
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            val paraRange = if (alloc.specificParas.isNotEmpty()) {
+                                "Paras ${alloc.specificParas.first()}–${alloc.specificParas.last()}"
+                            } else "${alloc.count} paras"
+                            Text(
+                                text = "${alloc.count} paras · $paraRange",
+                                fontFamily = InterFontFamily,
+                                fontSize = 13.sp,
+                                color = colors.mutedText
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onRemoveAllocation(index) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove",
+                                tint = colors.mutedText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                IconButton(
-                    onClick = onDecrement,
-                    enabled = allocation.count > 1,
-                    modifier = Modifier.size(38.dp)
+            item {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "NAME A PERSON",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                BasicTextField(
+                    value = newPersonName,
+                    onValueChange = onNewPersonNameChange,
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (newPersonName.isEmpty()) {
+                            Text(
+                                text = "Person's name",
+                                fontFamily = InterFontFamily,
+                                fontSize = 16.sp,
+                                color = colors.mutedText.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.4.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Remove,
-                        contentDescription = "Decrease count",
-                        modifier = Modifier.size(18.dp)
-                    )
+                    listOf(1, 2, 3, 5).forEach { count ->
+                        val isSelected = newPersonCount == count
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (isSelected) colors.pine else Color.Transparent)
+                                .border(1.2.dp, if (isSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                                .clickable { onNewPersonCountChange(count) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "$count ${if (count == 1) "Para" else "Paras"}",
+                                fontFamily = InterFontFamily,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp,
+                                color = if (isSelected) Color(0xFFF1EBDD) else colors.text
+                            )
+                        }
+                    }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = accentColor.copy(alpha = 0.14f)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (remaining > 0) {
+                    val isRemainingSelected = newPersonCount == remaining
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (isRemainingSelected) colors.pine else Color.Transparent)
+                            .border(1.2.dp, if (isRemainingSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                            .clickable { onNewPersonCountChange(remaining) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Remaining ($remaining)",
+                            fontFamily = InterFontFamily,
+                            fontWeight = if (isRemainingSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = if (isRemainingSelected) Color(0xFFF1EBDD) else colors.text
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = onAddPerson,
+                    enabled = newPersonName.isNotBlank() && remaining > 0,
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.gold,
+                        contentColor = Color(0xFF1B1B19),
+                        disabledContainerColor = colors.gold.copy(alpha = 0.35f),
+                        disabledContentColor = Color(0xFF1B1B19).copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
                 ) {
                     Text(
-                        text = if (isAmal) "${allocation.count}" else "${allocation.count}P",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = accentColor,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        text = "Add person to schedule +",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
                     )
                 }
 
-                IconButton(
-                    onClick = onIncrement,
-                    enabled = allocation.count < maxCount,
-                    modifier = Modifier.size(38.dp)
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "$totalAssigned / $totalTarget paras named · ${allocations.size} people",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onCreateRoom,
+                    enabled = isComplete,
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.pine,
+                        contentColor = Color(0xFFF1EBDD),
+                        disabledContainerColor = colors.softNeutral.copy(alpha = 0.7f),
+                        disabledContentColor = colors.mutedText.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Increase count",
-                        modifier = Modifier.size(18.dp)
+                    Text(
+                        text = "Create schedule →",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
                     )
                 }
 
-                IconButton(
-                    onClick = onRemove,
-                    modifier = Modifier.size(38.dp)
+                Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+// =========================================================================
+// LOCAL SETUP: Amal List ("Set up the amal list")
+// =========================================================================
+@Composable
+private fun LocalAmalSetup(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    totalTarget: Int,
+    onTotalTargetChange: (Int) -> Unit,
+    allocations: List<ParticipantAllocation>,
+    newPersonName: String,
+    onNewPersonNameChange: (String) -> Unit,
+    newPersonCount: Int,
+    onNewPersonCountChange: (Int) -> Unit,
+    onAddPerson: () -> Unit,
+    onRemoveAllocation: (Int) -> Unit,
+    onCreateRoom: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+    val totalAssigned = allocations.sumOf { it.count }
+    val remaining = (totalTarget - totalAssigned).coerceAtLeast(0)
+    val isComplete = totalAssigned == totalTarget
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Remove ${allocation.name}",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
+
+                    Text(
+                        text = "LOCAL",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.sp,
+                        color = colors.mutedText
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Set up the\namal list",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = "AMAL TITLE",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                BasicTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    textStyle = TextStyle(
+                        fontFamily = FrauncesFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 24.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (title.isEmpty()) {
+                            Text(
+                                text = "e.g. Friday Salawat",
+                                fontFamily = FrauncesFontFamily,
+                                fontSize = 24.sp,
+                                color = colors.mutedText.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.6.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "A descriptive name for your group",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "TOTAL TARGET RECITATIONS",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = totalTarget.toString(),
+                        fontFamily = FrauncesFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 44.sp,
+                        color = colors.text
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(40, 100, 110, 313).forEach { preset ->
+                            val isSelected = totalTarget == preset
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(if (isSelected) colors.pine else Color.Transparent)
+                                    .border(1.2.dp, if (isSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                                    .clickable { onTotalTargetChange(preset) }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = preset.toString(),
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 13.sp,
+                                    color = if (isSelected) Color(0xFFF1EBDD) else colors.text
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$totalAssigned / $totalTarget",
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 38.sp,
+                            color = colors.text
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "recitations assigned",
+                            fontFamily = InterFontFamily,
+                            fontSize = 14.sp,
+                            color = colors.mutedText,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
+
+                    Text(
+                        text = "$remaining remaining",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                WaveTrack(
+                    progress = (totalAssigned.toFloat() / totalTarget.toFloat()).coerceIn(0f, 1f),
+                    pineColor = colors.pine,
+                    trackColor = colors.rules
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "ADDED SO FAR",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+            }
+
+            if (allocations.isEmpty()) {
+                item {
+                    Text(
+                        text = "No participants added yet. Enter names below to assign portions.",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
+            } else {
+                itemsIndexed(allocations) { index, alloc ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = alloc.name,
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = colors.text
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Text(
+                                text = "${alloc.count} recitations",
+                                fontFamily = InterFontFamily,
+                                fontSize = 13.sp,
+                                color = colors.mutedText
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onRemoveAllocation(index) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove",
+                                tint = colors.mutedText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "NAME A PERSON",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                BasicTextField(
+                    value = newPersonName,
+                    onValueChange = onNewPersonNameChange,
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 16.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (newPersonName.isEmpty()) {
+                            Text(
+                                text = "Person's name",
+                                fontFamily = InterFontFamily,
+                                fontSize = 16.sp,
+                                color = colors.mutedText.copy(alpha = 0.6f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.4.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(10, 20, 25, 50).forEach { count ->
+                        val isSelected = newPersonCount == count
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (isSelected) colors.pine else Color.Transparent)
+                                .border(1.2.dp, if (isSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                                .clickable { onNewPersonCountChange(count) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = count.toString(),
+                                fontFamily = InterFontFamily,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp,
+                                color = if (isSelected) Color(0xFFF1EBDD) else colors.text
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (remaining > 0) {
+                    val isRemainingSelected = newPersonCount == remaining
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (isRemainingSelected) colors.pine else Color.Transparent)
+                            .border(1.2.dp, if (isRemainingSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                            .clickable { onNewPersonCountChange(remaining) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Remaining ($remaining)",
+                            fontFamily = InterFontFamily,
+                            fontWeight = if (isRemainingSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 13.sp,
+                            color = if (isRemainingSelected) Color(0xFFF1EBDD) else colors.text
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = onAddPerson,
+                    enabled = newPersonName.isNotBlank() && remaining > 0,
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.gold,
+                        contentColor = Color(0xFF1B1B19),
+                        disabledContainerColor = colors.gold.copy(alpha = 0.35f),
+                        disabledContentColor = Color(0xFF1B1B19).copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Text(
+                        text = "Add person to schedule +",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "$totalAssigned / $totalTarget recitations named · ${allocations.size} people",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onCreateRoom,
+                    enabled = isComplete,
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.pine,
+                        contentColor = Color(0xFFF1EBDD),
+                        disabledContainerColor = colors.softNeutral.copy(alpha = 0.7f),
+                        disabledContentColor = colors.mutedText.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Text(
+                        text = "Create room →",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+// =========================================================================
+// ONLINE AMAL SETUP: "Custom Amal target"
+// =========================================================================
+@Composable
+private fun OnlineAmalSetup(
+    amalName: String,
+    onAmalNameChange: (String) -> Unit,
+    totalTarget: Int,
+    onTotalTargetChange: (Int) -> Unit,
+    onCreateRoom: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        TopRightStepBubble(softNeutral = colors.softNeutral)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "ONLINE",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 1.sp,
+                            color = colors.mutedText
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(colors.gold)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = "SETUP ONLINE ROOM",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Custom Amal\ntarget",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Custom Amal Target Distribution · ",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText
+                    )
+                    Text(
+                        text = "Change",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        textDecoration = TextDecoration.Underline,
+                        color = colors.pineText,
+                        modifier = Modifier.clickable { onBack() }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Text(
+                    text = "Name your room and create it. You'll get a passcode and QR code so members can join from their own phones and pledge their own recitations.",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(30.dp))
+
+                Text(
+                    text = "Amal name*",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                BasicTextField(
+                    value = amalName,
+                    onValueChange = onAmalNameChange,
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 18.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (amalName.isEmpty()) {
+                            Text(
+                                text = "e.g. Friday Salawat",
+                                fontFamily = InterFontFamily,
+                                fontSize = 18.sp,
+                                color = colors.mutedText.copy(alpha = 0.5f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.4.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Compulsory · a descriptive name for your group",
+                    fontFamily = InterFontFamily,
+                    fontSize = 12.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = "Total target recitations",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = totalTarget.toString(),
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 52.sp,
+                    letterSpacing = (-1).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.6.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Presets",
+                        fontFamily = InterFontFamily,
+                        fontSize = 13.sp,
+                        color = colors.mutedText
+                    )
+
+                    listOf(40, 100, 110, 313).forEach { preset ->
+                        val isSelected = totalTarget == preset
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(if (isSelected) colors.pine else Color.Transparent)
+                                .border(1.2.dp, if (isSelected) colors.pine else colors.gold, RoundedCornerShape(18.dp))
+                                .clickable { onTotalTargetChange(preset) }
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = preset.toString(),
+                                fontFamily = InterFontFamily,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp,
+                                color = if (isSelected) Color(0xFFF1EBDD) else colors.text
+                            )
+                        }
+                    }
+                }
+            }
+
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                if (amalName.isBlank()) {
+                    Text(
+                        text = "Room title required",
+                        fontFamily = InterFontFamily,
+                        fontSize = 12.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                Button(
+                    onClick = onCreateRoom,
+                    enabled = amalName.isNotBlank(),
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.pine,
+                        contentColor = Color(0xFFF1EBDD),
+                        disabledContainerColor = colors.softNeutral.copy(alpha = 0.7f),
+                        disabledContentColor = colors.mutedText.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Text(
+                        text = "Create online room →",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
                     )
                 }
             }
         }
+    }
+}
+
+// =========================================================================
+// ONLINE KHATM SETUP: One-Time / Monthly Title input
+// =========================================================================
+@Composable
+private fun OnlineKhatmSetup(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    type: DistributionType,
+    onCreateRoom: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+    val typeName = if (type == DistributionType.ONE_TIME_KHATM) "One-time Quran" else "Monthly Quran khatm"
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.background)
+    ) {
+        TopRightStepBubble(softNeutral = colors.softNeutral)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.text
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "ONLINE",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 1.sp,
+                            color = colors.mutedText
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(colors.gold)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Text(
+                    text = "SETUP ONLINE ROOM",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.1.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Name your\nroom",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 36.sp,
+                    lineHeight = 42.sp,
+                    letterSpacing = (-0.5).sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "$typeName · 30 paras",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "You'll receive a room code and QR code. Members can join from their devices and claim their own paras.",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = colors.mutedText
+                )
+
+                Spacer(modifier = Modifier.height(36.dp))
+
+                Text(
+                    text = "Room name*",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = colors.text
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                BasicTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    textStyle = TextStyle(
+                        fontFamily = InterFontFamily,
+                        fontSize = 18.sp,
+                        color = colors.text
+                    ),
+                    cursorBrush = SolidColor(colors.gold),
+                    singleLine = true,
+                    decorationBox = { innerTextField ->
+                        if (title.isEmpty()) {
+                            Text(
+                                text = "e.g. Ramadan Khatm",
+                                fontFamily = InterFontFamily,
+                                fontSize = 18.sp,
+                                color = colors.mutedText.copy(alpha = 0.5f)
+                            )
+                        }
+                        innerTextField()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                WaveDivider(
+                    color = colors.gold,
+                    strokeWidth = 1.4.dp,
+                    amplitude = 2.dp,
+                    wavelength = 44.dp,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                if (title.isBlank()) {
+                    Text(
+                        text = "Room title required",
+                        fontFamily = InterFontFamily,
+                        fontSize = 12.sp,
+                        color = colors.mutedText,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                Button(
+                    onClick = onCreateRoom,
+                    enabled = title.isNotBlank(),
+                    shape = RoundedCornerShape(26.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.pine,
+                        contentColor = Color(0xFFF1EBDD),
+                        disabledContainerColor = colors.softNeutral.copy(alpha = 0.7f),
+                        disabledContentColor = colors.mutedText.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Text(
+                        text = "Create online room →",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopRightStepBubble(softNeutral: Color) {
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+    ) {
+        val w = size.width
+        val circleCenter = Offset(w - 10.dp.toPx(), 20.dp.toPx())
+        val circleRadius = 75.dp.toPx()
+
+        drawCircle(
+            color = softNeutral,
+            radius = circleRadius,
+            center = circleCenter
+        )
     }
 }

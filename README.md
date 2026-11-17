@@ -20,16 +20,6 @@ Quran Baanto is a calm, offline-first Android application for organizing Qur'an 
 
 ---
 
-## GitHub Actions CI/CD Workflows
-
-The repository includes pre-configured, production-ready GitHub Actions workflows:
-
-1. **`.github/workflows/build-apk.yml`**: Builds debug APK and uploads `quran-baanto-debug-apk` artifact.
-2. **`.github/workflows/build-release.yml`**: Production Release workflow triggered manually or by git tags (`v*`). Builds Google Play Store **Android App Bundle (`app-release.aab`)** and **Release APK (`app-release.apk`)**.
-3. **`.github/workflows/ci.yml`**: Runs unit tests and verifies compilation on every commit and pull request.
-
----
-
 ## Build Instructions
 
 ### Prerequisites

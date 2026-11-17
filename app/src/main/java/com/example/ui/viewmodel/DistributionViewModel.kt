@@ -40,7 +40,8 @@ data class ActiveDistributionUiState(
     val participants: List<ParticipantEntity> = emptyList(),
     val selectedYear: Int = Calendar.getInstance().get(Calendar.YEAR),
     val selectedMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1, // 1..12
-    val assignments: List<ParaAssignment> = emptyList()
+    val assignments: List<ParaAssignment> = emptyList(),
+    val nextMonthAssignments: List<ParaAssignment> = emptyList()
 ) {
     val isAmal: Boolean
         get() = distribution?.type == DistributionType.AMAL
@@ -379,7 +380,8 @@ class DistributionViewModel(application: Application) : AndroidViewModel(applica
                 id = it.id,
                 name = it.name,
                 count = it.allocatedCount,
-                displayOrder = it.displayOrder
+                displayOrder = it.specificParaNumber ?: it.displayOrder,
+                specificParas = if (it.specificParaNumber != null) listOf(it.specificParaNumber) else emptyList()
             )
         }
         return RotationEngine.calculateAssignments(
@@ -447,7 +449,8 @@ class DistributionViewModel(application: Application) : AndroidViewModel(applica
                                 id = it.id,
                                 name = it.name,
                                 count = it.allocatedCount,
-                                displayOrder = it.displayOrder
+                                displayOrder = it.specificParaNumber ?: it.displayOrder,
+                                specificParas = if (it.specificParaNumber != null) listOf(it.specificParaNumber) else emptyList()
                             )
                         }
                         val assignments = if (allocs.isNotEmpty()) {
@@ -460,12 +463,24 @@ class DistributionViewModel(application: Application) : AndroidViewModel(applica
                             )
                         } else emptyList()
 
+                        val (nextYear, nextMonth) = if (month >= 12) (year + 1) to 1 else year to (month + 1)
+                        val nextMonthAssignments = if (allocs.isNotEmpty()) {
+                            RotationEngine.calculateAssignments(
+                                participants = allocs,
+                                startYear = dist.startYear,
+                                startMonth = dist.startMonth,
+                                targetYear = nextYear,
+                                targetMonth = nextMonth
+                            )
+                        } else emptyList()
+
                         ActiveDistributionUiState(
                             distribution = dist,
                             participants = participants,
                             selectedYear = year,
                             selectedMonth = month,
-                            assignments = assignments
+                            assignments = assignments,
+                            nextMonthAssignments = nextMonthAssignments
                         )
                     }
                 }
@@ -564,6 +579,7 @@ class DistributionViewModel(application: Application) : AndroidViewModel(applica
         memberName: String,
         requestedCount: Int,
         isGuest: Boolean,
+        specificStartPara: Int? = null,
         onResult: (Boolean) -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -576,10 +592,67 @@ class DistributionViewModel(application: Application) : AndroidViewModel(applica
                 memberName = memberName,
                 requestedCount = requestedCount,
                 isGuest = isGuest,
+                addedByProfileName = profile,
+                specificStartPara = specificStartPara
+            )
+            onResult(success)
+        }
+    }
+
+    fun joinAndClaimSpecificParas(
+        distributionId: Long,
+        memberName: String,
+        selectedParas: List<Int>,
+        isGuest: Boolean,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val profile = userProfileName.value.ifBlank { memberName }
+            if (!isGuest && userProfileName.value.isBlank() && memberName.isNotBlank()) {
+                preferencesDataStore.setUserProfileName(memberName.trim())
+            }
+            val success = repository.joinAndClaimSpecificParas(
+                distributionId = distributionId,
+                memberName = memberName,
+                selectedParas = selectedParas,
+                isGuest = isGuest,
                 addedByProfileName = profile
             )
             onResult(success)
         }
+    }
+
+    fun setMemberAdminRole(
+        distributionId: Long,
+        memberName: String,
+        isGuest: Boolean,
+        isAdmin: Boolean
+    ) {
+        viewModelScope.launch {
+            repository.setMemberAdminRole(
+                distributionId = distributionId,
+                memberName = memberName,
+                isGuest = isGuest,
+                isAdmin = isAdmin
+            )
+        }
+    }
+
+    fun nudgeParticipant(
+        distributionId: Long,
+        roomName: String,
+        memberName: String,
+        portionLabel: String
+    ): Pair<Boolean, String> {
+        val postedNotification = KhatmNotificationHelper.sendAdminMemberNudgeNotification(
+            context = appContext,
+            roomId = distributionId,
+            roomName = roomName,
+            memberName = memberName,
+            portionLabel = portionLabel
+        )
+        val shareMessage = "Assalamu Alaikum $memberName, gentle reminder to complete $portionLabel in \"$roomName\" on Quran Baanto."
+        return postedNotification to shareMessage
     }
 
     fun removeParticipantClaim(participantId: Long) {

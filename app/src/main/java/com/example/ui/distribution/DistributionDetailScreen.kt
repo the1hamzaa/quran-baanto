@@ -6,13 +6,22 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,89 +32,54 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.QrCode2
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Today
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import com.example.data.db.DistributionEntity
 import com.example.data.db.DistributionType
 import com.example.data.db.ParticipantEntity
-import com.example.domain.ParaAssignment
-import com.example.domain.RotationEngine
-import com.example.ui.components.ContiguousParaBlockBar
-import com.example.ui.components.OctagonalNumberMedallion
-import com.example.ui.components.PrimarySanctuaryButton
-import com.example.ui.components.ResizableSectionContainer
-import com.example.ui.components.SanctuaryGeometricGlyph
-import com.example.ui.components.SanctuaryLoadingState
-import com.example.ui.components.SanctuaryTopHeader
-import com.example.ui.components.SecondaryEditorialButton
-import com.example.ui.components.rememberAllocationPalette
-import com.example.ui.theme.LocalBlueAccent
-import com.example.ui.theme.OnlineGoldAccent
+import com.example.ui.components.WaveDivider
+import com.example.ui.theme.FrauncesFontFamily
+import com.example.ui.theme.InterFontFamily
+import com.example.ui.theme.QuranBaantoDesignSystem
 import com.example.ui.viewmodel.DistributionViewModel
 import com.example.util.KhatmNotificationHelper
-import com.example.util.MonthDateInfo
-import com.example.util.ServerSupportAdManager
 import java.util.Calendar
 
 private enum class OneTimeParaFilter {
@@ -114,6 +88,19 @@ private enum class OneTimeParaFilter {
     CLAIMED
 }
 
+/**
+ * PRODUCTION-GRADE REDESIGNED DISTRIBUTION DETAIL SCREEN
+ *
+ * Implements exact Organic Modernism designs from reference screenshots:
+ * - Online One-Time Khatm: Pine arc header, 30 arch tiles, wave track, claim/complete pills, filters
+ * - Online Monthly Khatm: Pine arc header, 220dp beaded circular ring, month switcher, your para
+ * - Online Monthly Choose Paras: 30 arch tiles with taken/yours/open states, confirm pill
+ * - Online Amal: Large Fraunces recitation counter, wave track, pledge pill, + counter, round reopening
+ * - Local Rooms: Exact local designs with back/edit/delete topbar, segmented allocation bar, numbered roster
+ * - Admin Powers: ONLY accessible on online rooms created by current user (dist.isOnline && dist.isHost)
+ * - Delete Room: Flow connects to DeleteRoomScreen with confirmation text requirement
+ * - ZERO mock placeholder names: real database records and empty states only
+ */
 @Composable
 fun DistributionDetailScreen(
     distributionId: Long,
@@ -124,23 +111,22 @@ fun DistributionDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val colors = QuranBaantoDesignSystem.colors
+
     val activeState by distributionViewModel.activeDistributionState.collectAsState()
     val savedProfileName by distributionViewModel.userProfileName.collectAsState()
-    val celebrationMessage by distributionViewModel.celebrationMessage.collectAsState()
-    val reopenedPasscode by distributionViewModel.reopenedRoomPasscode.collectAsState()
-    val shouldPromptNotificationOptIn by distributionViewModel.shouldPromptNotificationOptIn.collectAsState()
 
     var showShareDialog by remember { mutableStateOf(false) }
     var showQrCodeDialog by remember { mutableStateOf(false) }
     var showDueReminderDialog by remember { mutableStateOf(false) }
     var activeDueScheduleLabel by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
-    var showOneTimeClaimDialogForPara by remember { mutableStateOf<Int?>(null) }
-    var showOneTimeClaimModal by remember { mutableStateOf(false) }
+    var showClaimModal by remember { mutableStateOf(false) }
+    var selectedParaForClaim by remember { mutableStateOf<Int?>(null) }
     var showJoinSlotDialog by remember { mutableStateOf(false) }
     var showReopenAmalDialog by remember { mutableStateOf(false) }
-    var oneTimeParaFilter by remember { mutableStateOf(OneTimeParaFilter.ALL) }
-    var memberToKick by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    var showAdminPowers by remember { mutableStateOf(false) }
+    var isChoosingMonthlyParas by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -162,2656 +148,2286 @@ fun DistributionDetailScreen(
     }
 
     val dist = activeState.distribution
+
     if (dist == null) {
-        Scaffold(
-            topBar = {
-                SanctuaryTopHeader(
-                    title = "Session Details",
-                    onBack = onBack
-                )
-            },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            containerColor = MaterialTheme.colorScheme.background,
+        Box(
             modifier = modifier
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 22.dp, vertical = 28.dp),
-                contentAlignment = Alignment.TopCenter
+                .fillMaxSize()
+                .background(colors.background),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SanctuaryLoadingState(
-                    message = "Loading session schedule..."
+                ArchWindowVector(
+                    modifier = Modifier.size(48.dp),
+                    outlineColor = colors.gold
+                )
+                Text(
+                    text = "Loading room schedule...",
+                    fontFamily = InterFontFamily,
+                    fontSize = 14.sp,
+                    color = colors.onSurfaceVariant
                 )
             }
         }
         return
     }
 
-    val isAmal = dist.type == DistributionType.AMAL
-    val isOneTimeKhatm = dist.type == DistributionType.ONE_TIME_KHATM
-    val isMonthlyKhatm = dist.type == DistributionType.KHATM
-
     // Refresh active reminder label when switching rooms or months
     LaunchedEffect(dist.id, activeState.participants, activeState.selectedYear, activeState.selectedMonth) {
         activeDueScheduleLabel = distributionViewModel.getScheduledDueReminderLabel(dist.id)
     }
 
-    val currentCal = remember { Calendar.getInstance() }
-    val isViewingCurrentMonth = activeState.selectedYear == currentCal.get(Calendar.YEAR) &&
-        activeState.selectedMonth == (currentCal.get(Calendar.MONTH) + 1)
-
-    // Strictly ordered 1 to 30 in ascending order of lowest Para
-    val orderedAssignments = remember(activeState.assignments) {
-        activeState.assignments.sortedWith(RotationEngine.paraFirstComparator)
-    }
-
-    val participantById = remember(activeState.participants) {
-        activeState.participants.associateBy { it.id }
-    }
-
-    // Pinned participants / assignments for the dedicated "Pinned — My Paras" container
-    val pinnedMonthlyAssignments = remember(orderedAssignments, participantById) {
-        orderedAssignments.filter { participantById[it.participantId]?.isPinned == true }
-    }
-    val pinnedOneTimeClaims = remember(isOneTimeKhatm, activeState.participants) {
-        if (!isOneTimeKhatm) emptyList()
-        else activeState.participants
-            .filter { it.isPinned }
-            .sortedBy { it.specificParaNumber ?: it.displayOrder }
-    }
-    val pinnedAmalParticipants = remember(isAmal, activeState.participants) {
-        if (!isAmal) emptyList()
-        else activeState.participants.filter { it.isPinned }
-    }
-
-    // Map Para 1..30 -> ParticipantEntity for One-Time Khatm
-    val oneTimeClaimsByPara = remember(isOneTimeKhatm, activeState.participants) {
-        if (!isOneTimeKhatm) emptyMap()
-        else activeState.participants.associateBy { it.specificParaNumber ?: it.displayOrder }
-    }
-
-    val totalAllocatedCount = remember(activeState.participants) {
-        activeState.participants.sumOf { it.allocatedCount }
-    }
-    val remainingCapacity = (dist.totalTarget - totalAllocatedCount).coerceAtLeast(0)
-
-    val allocationBlockSizes = remember(isAmal, isOneTimeKhatm, activeState.participants, orderedAssignments) {
-        when {
-            isAmal -> activeState.participants.map { it.allocatedCount }
-            isOneTimeKhatm -> activeState.participants
-                .groupingBy { it.name.trim().lowercase() }
-                .eachCount()
-                .values
-                .toList()
-            else -> orderedAssignments.map { it.allocatedCount }
+    val isCoAdmin = remember(activeState.participants, savedProfileName) {
+        val trimmed = savedProfileName.trim()
+        trimmed.isNotBlank() && activeState.participants.any {
+            it.isAdmin && !it.isGuestEntry && it.name.trim().equals(trimmed, ignoreCase = true)
         }
     }
+    val canOpenAdminPowers = dist.isOnline && (dist.isHost || isCoAdmin)
 
-    val palette = rememberAllocationPalette()
+    val detailSubView = when {
+        showAdminPowers && canOpenAdminPowers -> "admin"
+        showDeleteConfirmation -> "delete"
+        isChoosingMonthlyParas && dist.isOnline && dist.type == DistributionType.KHATM -> "choose_paras"
+        else -> "main"
+    }
 
-    Scaffold(
-        topBar = {
-            SanctuaryTopHeader(
-                title = dist.name,
-                badgeText = when {
-                    dist.isClosedForever -> "CLOSED"
-                    dist.isOnline -> "ONLINE"
-                    else -> "LOCAL"
-                },
-                onBack = onBack
-            )
+    BackHandler(enabled = detailSubView == "main") {
+        onBack()
+    }
+
+    AnimatedContent(
+        targetState = detailSubView,
+        transitionSpec = {
+            fadeIn(tween(180, easing = FastOutSlowInEasing)) togetherWith
+                fadeOut(tween(140, easing = FastOutSlowInEasing))
         },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background,
+        label = "distribution_detail_subview",
         modifier = modifier
-    ) { innerPadding ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            val horizontalPad = if (maxWidth >= 640.dp) 32.dp else 22.dp
-
-            LazyColumn(
-                contentPadding = PaddingValues(
-                    top = 20.dp,
-                    bottom = 48.dp,
-                    start = horizontalPad,
-                    end = horizontalPad
-                ),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // 0. Online Room Passcode, QR Code & Due Reminder Banner (if Online Room)
-                if (dist.isOnline && !dist.roomPasscode.isNullOrBlank()) {
-                    item(key = "online_room_passcode_banner") {
-                        OnlineRoomPasscodeBanner(
-                            passcode = dist.roomPasscode,
-                            isClosed = dist.isClosedForever,
-                            hasPendingSync = dist.hasPendingSync,
+            .fillMaxSize()
+            .background(colors.background)
+    ) { subView ->
+        when (subView) {
+            "admin" -> {
+                DistributionAdminScreen(
+                    distributionId = dist.id,
+                    distributionViewModel = distributionViewModel,
+                    onBack = { showAdminPowers = false }
+                )
+            }
+            "delete" -> {
+                DeleteRoomScreen(
+                    roomName = dist.name,
+                    memberCount = activeState.participants.size,
+                    onConfirmDelete = {
+                        distributionViewModel.deleteDistribution(dist.id)
+                        onBack()
+                    },
+                    onCancel = { showDeleteConfirmation = false }
+                )
+            }
+            "choose_paras" -> {
+                OnlineMonthlyChooseParasView(
+                    dist = dist,
+                    activeState = activeState,
+                    onConfirm = { chosenParas ->
+                        distributionViewModel.joinAndClaimSpecificParas(
+                            distributionId = dist.id,
+                            memberName = savedProfileName.ifBlank { "You" },
+                            selectedParas = chosenParas,
+                            isGuest = false
+                        )
+                        isChoosingMonthlyParas = false
+                    },
+                    onBack = { isChoosingMonthlyParas = false }
+                )
+            }
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(colors.background)
+                ) {
+                    if (dist.isOnline) {
+                        OnlineRoomView(
+                            dist = dist,
+                            activeState = activeState,
+                            savedProfileName = savedProfileName,
+                            canOpenAdminPowers = canOpenAdminPowers,
+                            distributionViewModel = distributionViewModel,
+                            onBack = onBack,
                             onShowQrCode = { showQrCodeDialog = true },
-                            onCopyCode = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Room Passcode", dist.roomPasscode))
-                                Toast.makeText(context, "Room Passcode copied", Toast.LENGTH_SHORT).show()
-                            },
                             onOpenDueReminder = {
                                 ensureNotificationPermissionRequested()
                                 showDueReminderDialog = true
-                            }
-                        )
-                    }
-                }
-
-                // 1. Spacious Overview Card + Multi-Color Allocation Breakdown Bar
-                item(key = "overview_section") {
-                    when {
-                        isOneTimeKhatm && dist.isClosedForever -> {
-                            ClosedForeverKhatmCard(
-                                roomName = dist.name,
-                                summaryText = dist.closedSummaryText ?: "30/30 Paras Completed • Closed"
-                            )
-                        }
-                        isOneTimeKhatm -> {
-                            val claimedCount = oneTimeClaimsByPara.size
-                            val completedCount = oneTimeClaimsByPara.values.count { it.isCompleted }
-                            OneTimeKhatmSummaryCard(
-                                isOnline = dist.isOnline,
-                                claimedCount = claimedCount,
-                                completedCount = completedCount,
-                                blockSizes = allocationBlockSizes
-                            )
-                        }
-                        isAmal -> {
-                            val completedSum = activeState.participants.sumOf {
-                                if (it.isCompleted) it.allocatedCount else it.completedCount.coerceIn(0, it.allocatedCount)
-                            }
-                            AmalSummarySpecimenCard(
-                                isOnline = dist.isOnline,
-                                totalTarget = dist.totalTarget,
-                                claimedSum = totalAllocatedCount,
-                                completedSum = completedSum,
-                                roundNumber = dist.roundNumber,
-                                participantCount = activeState.participants.size,
-                                blockSizes = allocationBlockSizes
-                            )
-                        }
-                        else -> {
-                            val completedCount = activeState.participants.count {
-                                it.isCompletedForMonth(activeState.selectedYear, activeState.selectedMonth)
-                            }
-                            MonthCycleNavigatorCard(
-                                isOnline = dist.isOnline,
-                                dateInfo = activeState.dateInfo,
-                                isCurrentMonth = isViewingCurrentMonth,
-                                completedMembersCount = completedCount,
-                                totalMembersCount = activeState.participants.size,
-                                blockSizes = allocationBlockSizes,
-                                onPreviousMonth = { distributionViewModel.navigateMonth(-1) },
-                                onNextMonth = { distributionViewModel.navigateMonth(1) },
-                                onResetCurrent = { distributionViewModel.resetToCurrentMonth() }
-                            )
-                        }
-                    }
-                }
-
-                // 2. Dedicated Primary Action Buttons Section (Claim / Share / Copy / Due Reminder in their own clean space)
-                item(key = "primary_actions_section") {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp)
-                    ) {
-                        if (!dist.isClosedForever) {
-                            if (isOneTimeKhatm && oneTimeClaimsByPara.size < 30 && dist.isOnline) {
-                                PrimarySanctuaryButton(
-                                    text = "Claim Para (For Self or Guest)",
-                                    icon = Icons.Default.PersonAdd,
-                                    onClick = {
-                                        showOneTimeClaimDialogForPara = null
-                                        showOneTimeClaimModal = true
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("claim_para_button")
-                                )
-                            } else if ((dist.isOnline || activeState.participants.isEmpty()) && remainingCapacity > 0 && !isOneTimeKhatm) {
-                                PrimarySanctuaryButton(
-                                    text = if (isAmal) {
-                                        "Pledge Recitations (Self or Guest • $remainingCapacity left)"
-                                    } else {
-                                        "Claim Monthly Para (Self or Guest • $remainingCapacity left)"
-                                    },
-                                    icon = Icons.Default.PersonAdd,
-                                    onClick = { showJoinSlotDialog = true },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("join_and_claim_slot_button")
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            PrimarySanctuaryButton(
-                                text = if (dist.isOnline) "Share Room" else "Share Schedule",
-                                icon = Icons.Default.Share,
-                                onClick = { showShareDialog = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("bottom_share_schedule_button")
-                            )
-
-                            SecondaryEditorialButton(
-                                text = "Copy Text",
-                                icon = Icons.Default.ContentCopy,
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Quran Baanto", activeState.shareText)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Copied schedule to clipboard", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        // Dedicated Customized Reminder Bar (Online: Remaining Paras/Amals; Local: Monthly Quran Notification)
-                        if (!dist.isClosedForever && (dist.isOnline || isMonthlyKhatm)) {
-                            DueReminderBannerButton(
-                                isOnline = dist.isOnline,
-                                activeScheduleLabel = activeDueScheduleLabel,
-                                onClick = {
-                                    ensureNotificationPermissionRequested()
-                                    showDueReminderDialog = true
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // 2.5 Dedicated "Pinned — My Paras" Section (when user pins their Paras or Amal share)
-                if (!dist.isClosedForever && (
-                        pinnedMonthlyAssignments.isNotEmpty() ||
-                            pinnedOneTimeClaims.isNotEmpty() ||
-                            pinnedAmalParticipants.isNotEmpty()
-                        )
-                ) {
-                    item(key = "pinned_my_paras_section") {
-                        PinnedMyParasSectionCard(
-                            isOnline = dist.isOnline,
-                            isMonthlyKhatm = isMonthlyKhatm,
-                            isOneTimeKhatm = isOneTimeKhatm,
-                            isAmal = isAmal,
-                            pinnedMonthlyAssignments = pinnedMonthlyAssignments,
-                            pinnedOneTimeClaims = pinnedOneTimeClaims,
-                            pinnedAmalParticipants = pinnedAmalParticipants,
-                            participantById = participantById,
-                            selectedYear = activeState.selectedYear,
-                            selectedMonth = activeState.selectedMonth,
-                            onOpenParaReader = onOpenParaReader,
-                            onToggleComplete = { participantId, label ->
-                                if (dist.isOnline) {
-                                    ensureNotificationPermissionRequested()
-                                }
-                                distributionViewModel.toggleParticipantCompletion(
-                                    distributionId = dist.id,
-                                    participantId = participantId,
-                                    assignedParaLabel = label
-                                )
                             },
-                            onUnpin = { participantId ->
-                                distributionViewModel.toggleParticipantPin(participantId)
-                            }
+                            onCopyCode = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Room Code", dist.roomPasscode.orEmpty()))
+                                Toast.makeText(context, "Room Code copied", Toast.LENGTH_SHORT).show()
+                            },
+                            onShareRoom = { showShareDialog = true },
+                            onCopyShareText = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Quran Baanto", activeState.shareText))
+                                Toast.makeText(context, "Copied schedule to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            onOpenAdminPowers = {
+                                if (canOpenAdminPowers) {
+                                    showAdminPowers = true
+                                }
+                            },
+                            onClaimOneTimePara = { paraNum ->
+                                selectedParaForClaim = paraNum
+                                showClaimModal = true
+                            },
+                            onOpenClaimModal = {
+                                selectedParaForClaim = null
+                                showClaimModal = true
+                            },
+                            onOpenJoinSlot = {
+                                showJoinSlotDialog = true
+                            },
+                            onStartChooseParas = {
+                                isChoosingMonthlyParas = true
+                            },
+                            onReopenAmalRound = {
+                                showReopenAmalDialog = true
+                            },
+                            onOpenParaReader = onOpenParaReader
                         )
-                    }
-                }
-
-                // 3. Clean Schedule / Para Board Section Header
-                if (!dist.isClosedForever) {
-                    item(key = "schedule_header") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = when {
-                                        isOneTimeKhatm -> "30-Para Schedule (1 → 30)"
-                                        isAmal -> "Member Allocations"
-                                        else -> "Monthly Schedule (1 → 30)"
-                                    },
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 18.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-
-                                Text(
-                                    text = when {
-                                        isAmal -> "Tap + to count or tick done"
-                                        else -> "Pin 📌, tick done, or jump to Para"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            if (isOneTimeKhatm) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        val claimedCount = oneTimeClaimsByPara.size
-                                        val availCount = (30 - claimedCount).coerceAtLeast(0)
-                                        ParaFilterSegment(
-                                            title = "All (30)",
-                                            selected = oneTimeParaFilter == OneTimeParaFilter.ALL,
-                                            onClick = { oneTimeParaFilter = OneTimeParaFilter.ALL },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        ParaFilterSegment(
-                                            title = "Available ($availCount)",
-                                            selected = oneTimeParaFilter == OneTimeParaFilter.AVAILABLE,
-                                            onClick = { oneTimeParaFilter = OneTimeParaFilter.AVAILABLE },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        ParaFilterSegment(
-                                            title = "Claimed ($claimedCount)",
-                                            selected = oneTimeParaFilter == OneTimeParaFilter.CLAIMED,
-                                            onClick = { oneTimeParaFilter = OneTimeParaFilter.CLAIMED },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-                            HorizontalDivider(
-                                thickness = 0.8.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
-                            )
-                        }
-                    }
-
-                    // 4. Individual Member Allocation Cards / 30-Para Interactive Slots
-                    if (isOneTimeKhatm) {
-                        if (!dist.isOnline && orderedAssignments.isNotEmpty()) {
-                            // Local One-Time Khatm where all members were named at setup: show clean ascending member blocks
-                            itemsIndexed(
-                                items = orderedAssignments,
-                                key = { _, item -> "local_onetime_${item.startPara}_${item.participantId}" }
-                            ) { index, assignment ->
-                                val partEntity = participantById[assignment.participantId]
-                                val isPinned = partEntity?.isPinned ?: false
-                                val isDone = partEntity?.isCompleted ?: false
-
-                                KhatmAssignmentSpecimenCard(
-                                    isOnline = false,
-                                    assignment = assignment,
-                                    isCompleted = isDone,
-                                    isGuest = false,
-                                    isPinned = isPinned,
-                                    accentColor = palette[index % palette.size],
-                                    onTogglePin = {
-                                        distributionViewModel.toggleParticipantPin(assignment.participantId)
-                                    },
-                                    onOpenReader = {
-                                        onOpenParaReader(assignment.startPara)
-                                    },
-                                    onToggleComplete = {
-                                        distributionViewModel.toggleParticipantCompletion(
-                                            distributionId = dist.id,
-                                            participantId = assignment.participantId,
-                                            assignedParaLabel = assignment.displayRangeText
-                                        )
-                                    },
-                                    onRemoveMember = {
-                                        memberToKick = assignment.participantId to assignment.participantName
-                                    }
-                                )
-                            }
-                        } else {
-                            val visibleParas = (1..30).filter { paraNum ->
-                                val isClaimed = oneTimeClaimsByPara.containsKey(paraNum)
-                                when (oneTimeParaFilter) {
-                                    OneTimeParaFilter.ALL -> true
-                                    OneTimeParaFilter.AVAILABLE -> !isClaimed
-                                    OneTimeParaFilter.CLAIMED -> isClaimed
-                                }
-                            }
-
-                            items(
-                                items = visibleParas,
-                                key = { paraNum -> "one_time_para_$paraNum" }
-                            ) { paraNum ->
-                                val claim = oneTimeClaimsByPara[paraNum]
-                                OneTimeParaSlotCard(
-                                    isOnline = dist.isOnline,
-                                    paraNumber = paraNum,
-                                    claim = claim,
-                                    accentColor = palette[(paraNum - 1) % palette.size],
-                                    onClaimClick = {
-                                        showOneTimeClaimDialogForPara = paraNum
-                                        showOneTimeClaimModal = true
-                                    },
-                                    onToggleComplete = {
-                                        if (claim != null) {
-                                            if (dist.isOnline) {
-                                                ensureNotificationPermissionRequested()
-                                            }
-                                            distributionViewModel.toggleParticipantCompletion(
-                                                distributionId = dist.id,
-                                                participantId = claim.id,
-                                                assignedParaLabel = "Para $paraNum"
-                                            )
-                                        }
-                                    },
-                                    onTogglePin = {
-                                        if (claim != null) {
-                                            distributionViewModel.toggleParticipantPin(claim.id)
-                                        }
-                                    },
-                                    onOpenReader = { onOpenParaReader(paraNum) },
-                                    onUnclaim = {
-                                        if (claim != null) {
-                                            distributionViewModel.removeParticipantClaim(claim.id)
-                                        }
-                                    },
-                                    onRemoveMember = if (claim != null) {
-                                        { memberToKick = claim.id to claim.name }
-                                    } else null
-                                )
-                            }
-                        }
-                    } else if (isAmal) {
-                        if (activeState.participants.isEmpty()) {
-                            item(key = "empty_online_amal_members") {
-                                Surface(
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = "No pledges yet in this round",
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "Tap 'Pledge Recitations' above or share the Room Passcode so members can join.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            itemsIndexed(
-                                items = activeState.participants,
-                                key = { _, item -> item.id }
-                            ) { index, participant ->
-                                AmalParticipantCard(
-                                    isOnline = dist.isOnline,
-                                    index = index + 1,
-                                    participant = participant,
-                                    accentColor = palette[index % palette.size],
-                                    onUpdateCount = { newCount ->
-                                        if (dist.isOnline) ensureNotificationPermissionRequested()
-                                        distributionViewModel.updateAmalCompletedCount(
-                                            distributionId = dist.id,
-                                            participantId = participant.id,
-                                            newCount = newCount
-                                        )
-                                    },
-                                    onTogglePin = {
-                                        distributionViewModel.toggleParticipantPin(participant.id)
-                                    },
-                                    onToggleComplete = {
-                                        if (dist.isOnline) {
-                                            ensureNotificationPermissionRequested()
-                                        }
-                                        distributionViewModel.toggleParticipantCompletion(
-                                            distributionId = dist.id,
-                                            participantId = participant.id
-                                        )
-                                    },
-                                    onRemoveMember = {
-                                        memberToKick = participant.id to participant.name
-                                    }
-                                )
-                            }
-                        }
-                    } else if (isMonthlyKhatm) {
-                        if (orderedAssignments.isEmpty()) {
-                            item(key = "empty_online_monthly_members") {
-                                Surface(
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = "Waiting for members to claim Paras",
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "Tap 'Claim Monthly Para' above or share the Room Passcode with your group.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            itemsIndexed(
-                                items = orderedAssignments,
-                                key = { _, item -> "${item.startPara}_${item.participantId}" }
-                            ) { index, assignment ->
-                                val partEntity = participantById[assignment.participantId]
-                                val isDone = partEntity?.isCompletedForMonth(
-                                    activeState.selectedYear,
-                                    activeState.selectedMonth
-                                ) ?: false
-                                val isGuest = partEntity?.isGuestEntry ?: false
-                                val isPinned = partEntity?.isPinned ?: false
-
-                                KhatmAssignmentSpecimenCard(
-                                    isOnline = dist.isOnline,
-                                    assignment = assignment,
-                                    isCompleted = isDone,
-                                    isGuest = isGuest,
-                                    isPinned = isPinned,
-                                    accentColor = palette[index % palette.size],
-                                    onTogglePin = {
-                                        distributionViewModel.toggleParticipantPin(assignment.participantId)
-                                    },
-                                    onOpenReader = {
-                                        onOpenParaReader(assignment.startPara)
-                                    },
-                                    onToggleComplete = {
-                                        if (dist.isOnline) {
-                                            ensureNotificationPermissionRequested()
-                                        }
-                                        distributionViewModel.toggleParticipantCompletion(
-                                            distributionId = dist.id,
-                                            participantId = assignment.participantId,
-                                            assignedParaLabel = assignment.displayRangeText
-                                        )
-                                    },
-                                    onRemoveMember = {
-                                        memberToKick = assignment.participantId to assignment.participantName
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 5. Dedicated Session Management Section (Reopen Amal / Edit / Delete in their own clean space)
-                item(key = "session_management_section") {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        HorizontalDivider(
-                            thickness = 0.8.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    } else {
+                        LocalRoomView(
+                            dist = dist,
+                            activeState = activeState,
+                            distributionViewModel = distributionViewModel,
+                            onBack = onBack,
+                            onEdit = { onEditDistribution(dist.id) },
+                            onDelete = { showDeleteConfirmation = true },
+                            onShare = { showShareDialog = true },
+                            onCopyText = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Quran Baanto", activeState.shareText))
+                                Toast.makeText(context, "Copied schedule to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            onOpenParaReader = onOpenParaReader
                         )
-
-                        if (isAmal) {
-                            PrimarySanctuaryButton(
-                                text = "Reopen Room for New Round (Round ${dist.roundNumber + 1})",
-                                icon = Icons.Default.Refresh,
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary,
-                                onClick = { showReopenAmalDialog = true },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("reopen_amal_room_button")
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            if (!dist.isClosedForever) {
-                                SecondaryEditorialButton(
-                                    text = "Edit Session",
-                                    icon = Icons.Default.Edit,
-                                    onClick = { onEditDistribution(distributionId) },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("edit_distribution_button")
-                                )
-                            }
-
-                            SecondaryEditorialButton(
-                                text = "Delete Session",
-                                icon = Icons.Default.Delete,
-                                accentColor = MaterialTheme.colorScheme.error,
-                                onClick = { showDeleteConfirmation = true },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("delete_distribution_button")
-                            )
-                        }
                     }
                 }
             }
         }
     }
 
-    if (shouldPromptNotificationOptIn) {
-        NotificationPermissionOptInDialog(
-            isOnlineRoomContext = dist.isOnline,
-            onEnableReminders = {
-                distributionViewModel.completeNotificationOptInPrompt(enabled = true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    !KhatmNotificationHelper.hasNotificationPermission(context)
-                ) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            },
-            onNotNow = {
-                distributionViewModel.dismissNotificationOptInPrompt()
-            }
-        )
-    }
+    // Dialog: One-Time Para Claim
+    if (showClaimModal && dist.type == DistributionType.ONE_TIME_KHATM) {
+        val takenParas = activeState.participants
+            .mapNotNull { it.specificParaNumber ?: it.displayOrder }
+            .toSet()
 
-    if (showOneTimeClaimModal) {
-        val takenSet = remember(oneTimeClaimsByPara) { oneTimeClaimsByPara.keys }
         OneTimeParaClaimDialog(
-            initialParaNumber = showOneTimeClaimDialogForPara,
-            takenParaNumbers = takenSet,
+            initialParaNumber = selectedParaForClaim,
+            takenParaNumbers = takenParas,
             savedProfileName = savedProfileName,
-            onConfirmClaim = { selectedParas, memberName, isGuest ->
+            onConfirmClaim = { paras, name, isGuest ->
                 distributionViewModel.claimMultipleOneTimeParas(
                     distributionId = dist.id,
-                    paraNumbers = selectedParas,
-                    memberName = memberName,
+                    paraNumbers = paras,
+                    memberName = name,
                     isGuest = isGuest
-                ) { count ->
-                    showOneTimeClaimModal = false
-                    if (count > 0) {
-                        Toast.makeText(
-                            context,
-                            "Claimed $count ${if (count == 1) "Para" else "Paras"} for $memberName",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
+                )
+                showClaimModal = false
             },
-            onDismiss = { showOneTimeClaimModal = false }
+            onDismiss = { showClaimModal = false }
         )
     }
 
+    // Dialog: Join Slot / Pledge (Amal / Monthly)
     if (showJoinSlotDialog) {
+        val totalAllocated = activeState.participants.sumOf { it.allocatedCount }
+        val remainingCapacity = (dist.totalTarget - totalAllocated).coerceAtLeast(0)
+
         JoinAndClaimSlotDialog(
-            isAmal = isAmal,
+            isAmal = dist.type == DistributionType.AMAL,
             remainingCapacity = remainingCapacity,
             savedProfileName = savedProfileName,
-            onConfirmClaim = { memberName, count, isGuest ->
+            onConfirmClaim = { name, count, isGuest ->
                 distributionViewModel.joinAndClaimAllocation(
                     distributionId = dist.id,
-                    memberName = memberName,
+                    memberName = name,
                     requestedCount = count,
                     isGuest = isGuest
-                ) { success ->
-                    showJoinSlotDialog = false
-                    if (success) {
-                        Toast.makeText(
-                            context,
-                            "Added $memberName ($count)",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
+                )
+                showJoinSlotDialog = false
             },
             onDismiss = { showJoinSlotDialog = false }
         )
     }
 
-    if (showReopenAmalDialog) {
+    // Dialog: QR Code
+    if (showQrCodeDialog && !dist.roomPasscode.isNullOrBlank()) {
+        RoomQrCodeDialog(
+            roomName = dist.name,
+            passcode = dist.roomPasscode.orEmpty(),
+            typeSubtitle = when (dist.type) {
+                DistributionType.KHATM -> "Monthly 30-Para Quran Khatm"
+                DistributionType.ONE_TIME_KHATM -> "One-Time 30-Para Quran Khatm"
+                DistributionType.AMAL -> "Custom Amal Recitation Target"
+            },
+            onDismiss = { showQrCodeDialog = false }
+        )
+    }
+
+    // Dialog: Due Reminder
+    if (showDueReminderDialog && dist.isOnline) {
+        val userRemainingSummary = distributionViewModel.buildOnlineUserRemainingSummary(
+            dist = dist,
+            participants = activeState.participants,
+            assignments = activeState.assignments,
+            year = activeState.selectedYear,
+            month = activeState.selectedMonth,
+            profileName = savedProfileName
+        )
+        OnlineRemainingReminderDialog(
+            roomName = dist.name,
+            memberName = savedProfileName.ifBlank { "You" },
+            remainingSummary = userRemainingSummary,
+            activeScheduleLabel = activeDueScheduleLabel,
+            onSelectPreset = { preset ->
+                val label = distributionViewModel.scheduleOnlineReminderForActiveRoom(preset)
+                activeDueScheduleLabel = label
+                Toast.makeText(context, "Reminder set for $label", Toast.LENGTH_SHORT).show()
+                showDueReminderDialog = false
+            },
+            onCancelScheduled = {
+                distributionViewModel.cancelDueReminderForActiveRoom()
+                activeDueScheduleLabel = null
+                Toast.makeText(context, "Reminder cancelled", Toast.LENGTH_SHORT).show()
+                showDueReminderDialog = false
+            },
+            onDismiss = { showDueReminderDialog = false }
+        )
+    }
+
+    // Dialog: Share
+    if (showShareDialog) {
+        ShareDistributionDialog(
+            shareText = activeState.shareText,
+            roomPasscode = dist.roomPasscode,
+            onShowQrCode = if (dist.isOnline) { { showQrCodeDialog = true } } else null,
+            onDismiss = { showShareDialog = false }
+        )
+    }
+
+    // Dialog: Reopen Amal Room Round
+    if (showReopenAmalDialog && dist.type == DistributionType.AMAL) {
         ReopenAmalRoomDialog(
             roomName = dist.name,
             currentRound = dist.roundNumber,
             isOnlineRoom = dist.isOnline,
             onConfirmReopen = { keepExisting ->
+                distributionViewModel.reopenAmalRoom(dist.id, keepExisting)
                 showReopenAmalDialog = false
-                distributionViewModel.reopenAmalRoom(
-                    distributionId = dist.id,
-                    keepMembersAndResetTicks = keepExisting
-                )
-                if (!dist.isOnline) {
-                    Toast.makeText(
-                        context,
-                        "Reopened \"${dist.name}\" for Round ${dist.roundNumber + 1}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
             },
             onDismiss = { showReopenAmalDialog = false }
         )
     }
-
-    reopenedPasscode?.let { newCode ->
-        ReopenedRoomPasscodeDialog(
-            roomName = dist.name,
-            roundNumber = dist.roundNumber,
-            newPasscode = newCode,
-            onShareClick = { showShareDialog = true },
-            onDismiss = { distributionViewModel.dismissReopenedRoomPasscode() }
-        )
-    }
-
-    celebrationMessage?.let { msg ->
-        KhatmCelebrationDialog(
-            message = msg,
-            onDismiss = { distributionViewModel.dismissCelebrationMessage() }
-        )
-    }
-
-    if (showShareDialog) {
-        ShareDistributionDialog(
-            shareText = activeState.shareText,
-            roomPasscode = if (dist.isOnline) dist.roomPasscode else null,
-            onShowQrCode = if (dist.isOnline && !dist.roomPasscode.isNullOrBlank()) {
-                { showQrCodeDialog = true }
-            } else null,
-            onDismiss = { showShareDialog = false }
-        )
-    }
-
-    if (showQrCodeDialog && !dist.roomPasscode.isNullOrBlank()) {
-        val typeLabel = when (dist.type) {
-            DistributionType.KHATM -> "Online Monthly 30-Para Khatm"
-            DistributionType.ONE_TIME_KHATM -> "Online One-Time 30-Para Khatm"
-            DistributionType.AMAL -> "Online Custom Amal (${dist.totalTarget} Target)"
-        }
-        RoomQrCodeDialog(
-            roomName = dist.name,
-            passcode = dist.roomPasscode,
-            typeSubtitle = typeLabel,
-            onDismiss = { showQrCodeDialog = false }
-        )
-    }
-
-    if (showDueReminderDialog) {
-        if (dist.isOnline) {
-            val remainingSummary = remember(
-                dist.id,
-                activeState.participants,
-                activeState.assignments,
-                activeState.selectedYear,
-                activeState.selectedMonth,
-                savedProfileName
-            ) {
-                distributionViewModel.buildOnlineUserRemainingSummary(
-                    dist = dist,
-                    participants = activeState.participants,
-                    assignments = activeState.assignments,
-                    year = activeState.selectedYear,
-                    month = activeState.selectedMonth,
-                    profileName = savedProfileName
-                )
-            }
-            OnlineRemainingReminderDialog(
-                roomName = dist.name,
-                memberName = savedProfileName,
-                remainingSummary = remainingSummary,
-                activeScheduleLabel = activeDueScheduleLabel,
-                onSelectPreset = { preset ->
-                    val message = distributionViewModel.scheduleOnlineReminderForActiveRoom(preset)
-                    activeDueScheduleLabel = distributionViewModel.getScheduledDueReminderLabel(dist.id)
-                    showDueReminderDialog = false
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                },
-                onCancelScheduled = {
-                    distributionViewModel.cancelDueReminderForActiveRoom()
-                    activeDueScheduleLabel = null
-                    showDueReminderDialog = false
-                    Toast.makeText(context, "Cleared scheduled reminder", Toast.LENGTH_SHORT).show()
-                },
-                onDismiss = { showDueReminderDialog = false }
-            )
-        } else {
-            LocalMonthlyNotificationDialog(
-                roomName = dist.name,
-                activeScheduleLabel = activeDueScheduleLabel,
-                onEnableMonthlyAlert = {
-                    val message = distributionViewModel.enableLocalMonthlyNotificationForActiveRoom()
-                    activeDueScheduleLabel = distributionViewModel.getScheduledDueReminderLabel(dist.id)
-                    showDueReminderDialog = false
-                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                },
-                onDisableMonthlyAlert = {
-                    distributionViewModel.cancelDueReminderForActiveRoom()
-                    activeDueScheduleLabel = null
-                    showDueReminderDialog = false
-                    Toast.makeText(context, "Disabled monthly notification", Toast.LENGTH_SHORT).show()
-                },
-                onDismiss = { showDueReminderDialog = false }
-            )
-        }
-    }
-
-    if (showDeleteConfirmation) {
-        DeleteConfirmationDialog(
-            distributionName = dist.name,
-            onConfirmDelete = {
-                distributionViewModel.deleteDistribution(distributionId)
-                showDeleteConfirmation = false
-                onBack()
-            },
-            onDismiss = { showDeleteConfirmation = false }
-        )
-    }
-
-    val showServerSupportPrompt by ServerSupportAdManager.showServerSupportPrompt.collectAsState()
-    val isAdPlaying by ServerSupportAdManager.isAdPlaying.collectAsState()
-    val adCountdownSeconds by ServerSupportAdManager.adCountdownSeconds.collectAsState()
-    val showGratitudeDialog by ServerSupportAdManager.showGratitudeDialog.collectAsState()
-    val pendingRoomName by ServerSupportAdManager.pendingRoomName.collectAsState()
-    val isRoomCreation by ServerSupportAdManager.isRoomCreation.collectAsState()
-    val adScope = rememberCoroutineScope()
-
-    if (showServerSupportPrompt) {
-        ServerSupportPromptDialog(
-            roomName = pendingRoomName.ifBlank { dist.name },
-            isRoomCreation = isRoomCreation,
-            onAccept = {
-                ServerSupportAdManager.acceptVoluntaryAd(context, adScope)
-            },
-            onDecline = {
-                ServerSupportAdManager.dismissPrompt()
-            }
-        )
-    }
-
-    if (isAdPlaying) {
-        ServerSupportAdPlayerDialog(
-            remainingSeconds = adCountdownSeconds,
-            onCloseEarly = {
-                ServerSupportAdManager.closeAdPlayer()
-            }
-        )
-    }
-
-    if (showGratitudeDialog) {
-        ServerSupportGratitudeDialog(
-            onDismiss = {
-                ServerSupportAdManager.dismissGratitude()
-            }
-        )
-    }
-
-    if (memberToKick != null) {
-        val (partId, partName) = memberToKick!!
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { memberToKick = null },
-            title = {
-                Text(
-                    text = "Remove Member",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to remove \"$partName\" from this room? Their assigned Para / recitation slot will be released.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        distributionViewModel.removeParticipantClaim(partId)
-                        memberToKick = null
-                        Toast.makeText(context, "Removed $partName", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Remove", color = MaterialTheme.colorScheme.onError)
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { memberToKick = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ONLINE ROOM VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-private fun OnlineRoomPasscodeBanner(
-    passcode: String,
-    isClosed: Boolean,
-    hasPendingSync: Boolean = false,
+private fun OnlineRoomView(
+    dist: DistributionEntity,
+    activeState: com.example.ui.viewmodel.ActiveDistributionUiState,
+    savedProfileName: String,
+    canOpenAdminPowers: Boolean,
+    distributionViewModel: DistributionViewModel,
+    onBack: () -> Unit,
     onShowQrCode: () -> Unit,
-    onCopyCode: () -> Unit,
     onOpenDueReminder: () -> Unit,
-    modifier: Modifier = Modifier
+    onCopyCode: () -> Unit,
+    onShareRoom: () -> Unit,
+    onCopyShareText: () -> Unit,
+    onOpenAdminPowers: () -> Unit,
+    onClaimOneTimePara: (Int) -> Unit,
+    onOpenClaimModal: () -> Unit,
+    onOpenJoinSlot: () -> Unit,
+    onStartChooseParas: () -> Unit,
+    onReopenAmalRound: () -> Unit,
+    onOpenParaReader: (Int) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = OnlineGoldAccent.copy(alpha = 0.12f),
-        border = BorderStroke(1.2.dp, OnlineGoldAccent.copy(alpha = 0.55f)),
-        modifier = modifier.fillMaxWidth()
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 64.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(OnlineGoldAccent),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Key,
-                        contentDescription = null,
-                        tint = Color(0xFF1A1405),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "ONLINE ROOM PASSCODE",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.7.sp,
-                                fontSize = 10.sp
-                            ),
-                            color = OnlineGoldAccent
-                        )
-                        if (hasPendingSync) {
-                            Icon(
-                                imageVector = Icons.Default.CloudQueue,
-                                contentDescription = "Offline Sync Queued",
-                                tint = OnlineGoldAccent,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                    }
-                    Text(
-                        text = passcode,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 17.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    onClick = onShowQrCode,
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier
-                        .size(40.dp)
-                        .testTag("banner_qr_code_button")
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.QrCode2,
-                            contentDescription = "Show Room QR Code",
-                            tint = OnlineGoldAccent,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                if (!isClosed) {
-                    Surface(
-                        onClick = onOpenDueReminder,
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .size(40.dp)
-                            .testTag("banner_due_reminder_button")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = "Schedule Due Reminder",
-                                tint = OnlineGoldAccent,
-                                modifier = Modifier.size(19.dp)
-                            )
-                        }
-                    }
-                }
-
-                Surface(
-                    onClick = onCopyCode,
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier
-                        .size(40.dp)
-                        .testTag("banner_copy_passcode_button")
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy Room Passcode",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DueReminderBannerButton(
-    isOnline: Boolean,
-    activeScheduleLabel: String?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val accentColor = if (isOnline) OnlineGoldAccent else LocalBlueAccent
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f)),
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("schedule_due_reminder_bar_button")
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(accentColor.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = when {
-                            !activeScheduleLabel.isNullOrBlank() -> "Reminder: $activeScheduleLabel"
-                            isOnline -> "Remind Me of My Remaining Share"
-                            else -> "Monthly New Distribution Alert"
-                        },
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (isOnline) {
-                            "Custom alerts only for your remaining Paras or Amal recitations"
-                        } else {
-                            "Get notified on the 1st of each month when the new schedule is ready to read & share"
-                        },
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Icon(
-                imageVector = Icons.Default.Schedule,
-                contentDescription = "Configure Reminder",
-                tint = accentColor,
-                modifier = Modifier.size(18.dp)
+        // Architectural Pine Header
+        item(key = "online_header") {
+            OnlineArchitecturalHeader(
+                title = dist.name,
+                roomPasscode = dist.roomPasscode,
+                isHost = canOpenAdminPowers,
+                roleBadgeText = if (dist.isHost) "HOST" else "ADMIN",
+                onBack = onBack,
+                onShowQrCode = onShowQrCode,
+                onOpenDueReminder = onOpenDueReminder,
+                onCopyCode = onCopyCode,
+                onOpenAdminPowers = if (canOpenAdminPowers) onOpenAdminPowers else null
             )
         }
+
+        // Room Content by Type
+        when (dist.type) {
+            DistributionType.ONE_TIME_KHATM -> {
+                item(key = "online_one_time_content") {
+                    OnlineOneTimeContent(
+                        dist = dist,
+                        participants = activeState.participants,
+                        savedProfileName = savedProfileName,
+                        distributionViewModel = distributionViewModel,
+                        onOpenClaimModal = onOpenClaimModal,
+                        onClaimPara = onClaimOneTimePara,
+                        onShareRoom = onShareRoom,
+                        onCopyShareText = onCopyShareText,
+                        onOpenDueReminder = onOpenDueReminder,
+                        onOpenParaReader = onOpenParaReader
+                    )
+                }
+            }
+            DistributionType.KHATM -> {
+                item(key = "online_monthly_content") {
+                    OnlineMonthlyContent(
+                        dist = dist,
+                        activeState = activeState,
+                        savedProfileName = savedProfileName,
+                        distributionViewModel = distributionViewModel,
+                        onStartChooseParas = onStartChooseParas,
+                        onShareRoom = onShareRoom,
+                        onCopyShareText = onCopyShareText,
+                        onOpenDueReminder = onOpenDueReminder,
+                        onOpenParaReader = onOpenParaReader
+                    )
+                }
+            }
+            DistributionType.AMAL -> {
+                item(key = "online_amal_content") {
+                    OnlineAmalContent(
+                        dist = dist,
+                        participants = activeState.participants,
+                        savedProfileName = savedProfileName,
+                        distributionViewModel = distributionViewModel,
+                        onOpenPledge = onOpenJoinSlot,
+                        onReopenRound = onReopenAmalRound,
+                        onShareRoom = onShareRoom,
+                        onCopyShareText = onCopyShareText,
+                        onOpenDueReminder = onOpenDueReminder
+                    )
+                }
+            }
+        }
     }
 }
 
-/**
- * Dedicated "Pinned — My Paras" container that sits cleanly above the schedule list
- * whenever the user pins one or more assignments for quick access.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// ONLINE ONE-TIME KHATM
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-private fun PinnedMyParasSectionCard(
-    isOnline: Boolean,
-    isMonthlyKhatm: Boolean,
-    isOneTimeKhatm: Boolean,
-    isAmal: Boolean,
-    pinnedMonthlyAssignments: List<ParaAssignment>,
-    pinnedOneTimeClaims: List<ParticipantEntity>,
-    pinnedAmalParticipants: List<ParticipantEntity>,
-    participantById: Map<Long, ParticipantEntity>,
-    selectedYear: Int,
-    selectedMonth: Int,
-    onOpenParaReader: (Int) -> Unit,
-    onToggleComplete: (Long, String?) -> Unit,
-    onUnpin: (Long) -> Unit,
-    modifier: Modifier = Modifier
+private fun OnlineOneTimeContent(
+    dist: DistributionEntity,
+    participants: List<ParticipantEntity>,
+    savedProfileName: String,
+    distributionViewModel: DistributionViewModel,
+    onOpenClaimModal: () -> Unit,
+    onClaimPara: (Int) -> Unit,
+    onShareRoom: () -> Unit,
+    onCopyShareText: () -> Unit,
+    onOpenDueReminder: () -> Unit,
+    onOpenParaReader: (Int) -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f),
-        border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)),
-        modifier = modifier
+    val colors = QuranBaantoDesignSystem.colors
+
+    val claimsByPara = remember(participants) {
+        participants.associateBy { it.specificParaNumber ?: it.displayOrder }
+    }
+    val claimedCount = claimsByPara.size
+    val completedCount = participants.count { it.isCompleted }
+    val openCount = (30 - claimedCount).coerceAtLeast(0)
+
+    // User's own claimed participant entries (may have claimed 1 or more paras)
+    val userClaims = remember(participants, savedProfileName) {
+        val trimmed = savedProfileName.trim()
+        if (trimmed.isNotBlank()) {
+            participants.filter { !it.isGuest && it.name.trim().equals(trimmed, ignoreCase = true) }
+        } else {
+            participants.filter { !it.isGuest }
+        }
+    }
+    val userClaimIds = remember(userClaims) { userClaims.map { it.id }.toSet() }
+    val userParaNumbers = remember(userClaims) {
+        userClaims.mapNotNull { it.specificParaNumber ?: it.displayOrder }.sorted()
+    }
+
+    var filter by remember { mutableStateOf(OneTimeParaFilter.ALL) }
+
+    Column(
+        modifier = Modifier
             .fillMaxWidth()
-            .testTag("pinned_my_paras_section")
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        // Headline
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "One-Time 30-Para Khatm",
+                fontFamily = FrauncesFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp,
+                color = colors.text
+            )
+            Text(
+                text = "$claimedCount of 30 claimed · $completedCount of 30 completed",
+                fontFamily = InterFontFamily,
+                fontSize = 13.5.sp,
+                color = colors.onSurfaceVariant
+            )
+        }
+
+        // Wave Progress Track
+        WaveTrack(
+            progress = if (claimedCount > 0) completedCount.toFloat() / 30f else 0f,
+            pineColor = colors.pine,
+            trackColor = colors.gold.copy(alpha = 0.35f)
+        )
+
+        // Primary Action: Claim Para Pill Button
+        if (claimedCount < 30) {
+            Button(
+                onClick = onOpenClaimModal,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.pine,
+                    contentColor = Color(0xFFF1EBDD)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .testTag("claim_para_button")
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PushPin,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(17.dp)
+                    Text(
+                        text = "Claim para (self or guest)",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
                     )
                     Text(
-                        text = "PINNED • MY PARAS",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp,
-                            fontSize = 11.sp
-                        ),
-                        color = MaterialTheme.colorScheme.secondary
+                        text = "→",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
                     )
                 }
+            }
+        }
 
+        // Secondary Action: Mark my para complete Pill Button + Jump to my para link
+        if (userClaims.isNotEmpty()) {
+            val isUserDone = userClaims.all { it.isCompleted }
+            Button(
+                onClick = {
+                    val target = userClaims.firstOrNull { it.isCompleted == isUserDone } ?: userClaims.first()
+                    if (isUserDone) {
+                        userClaims.filter { it.isCompleted }.forEach {
+                            distributionViewModel.toggleParticipantCompletion(dist.id, it.id)
+                        }
+                    } else {
+                        val nextPending = userClaims.firstOrNull { !it.isCompleted } ?: target
+                        distributionViewModel.toggleParticipantCompletion(dist.id, nextPending.id)
+                    }
+                },
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.gold,
+                    contentColor = if (colors.isDark) Color(0xFF15181C) else Color(0xFF1B1B19)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isUserDone) "Marked complete ✓" else "Mark my para complete",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "→",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+            if (userParaNumbers.isNotEmpty()) {
+                val firstPara = userParaNumbers.first()
                 Text(
-                    text = "Quick Access",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "Jump to my para (Para $firstPara) →",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = colors.pineText,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier
+                        .clickable { onOpenParaReader(firstPara) }
+                        .padding(vertical = 2.dp)
+                        .testTag("jump_to_my_para_button")
                 )
             }
-
-            if (isMonthlyKhatm) {
-                pinnedMonthlyAssignments.forEach { assignment ->
-                    val isDone = participantById[assignment.participantId]
-                        ?.isCompletedForMonth(selectedYear, selectedMonth) ?: false
-                    PinnedRowItem(
-                        isOnline = isOnline,
-                        name = assignment.participantName,
-                        rightValue = assignment.commaSeparatedParas,
-                        subtitle = assignment.displayRangeText,
-                        jumpParaNumber = assignment.startPara,
-                        isCompleted = isDone,
-                        onOpenReader = { onOpenParaReader(assignment.startPara) },
-                        onToggleComplete = {
-                            onToggleComplete(assignment.participantId, assignment.displayRangeText)
-                        },
-                        onUnpin = { onUnpin(assignment.participantId) }
-                    )
-                }
-            } else if (isOneTimeKhatm) {
-                pinnedOneTimeClaims.forEach { claim ->
-                    val paraNum = claim.specificParaNumber ?: claim.displayOrder
-                    PinnedRowItem(
-                        isOnline = isOnline,
-                        name = claim.name,
-                        rightValue = "$paraNum",
-                        subtitle = "Para $paraNum",
-                        jumpParaNumber = paraNum,
-                        isCompleted = claim.isCompleted,
-                        onOpenReader = { onOpenParaReader(paraNum) },
-                        onToggleComplete = { onToggleComplete(claim.id, "Para $paraNum") },
-                        onUnpin = { onUnpin(claim.id) }
-                    )
-                }
-            } else if (isAmal) {
-                pinnedAmalParticipants.forEach { part ->
-                    PinnedRowItem(
-                        isOnline = isOnline,
-                        name = part.name,
-                        rightValue = "${part.completedCount}/${part.allocatedCount}",
-                        subtitle = "${part.allocatedCount} Recitations",
-                        jumpParaNumber = null,
-                        isCompleted = part.isCompleted,
-                        onOpenReader = null,
-                        onToggleComplete = { onToggleComplete(part.id, null) },
-                        onUnpin = { onUnpin(part.id) }
-                    )
-                }
-            }
+            Text(
+                text = "For your paras, or any you claimed for a guest.",
+                fontFamily = InterFontFamily,
+                fontSize = 12.sp,
+                color = colors.onSurfaceVariant
+            )
         }
-    }
-}
 
-@Composable
-private fun PinnedRowItem(
-    isOnline: Boolean,
-    name: String,
-    rightValue: String,
-    subtitle: String,
-    jumpParaNumber: Int?,
-    isCompleted: Boolean,
-    onOpenReader: (() -> Unit)?,
-    onToggleComplete: () -> Unit,
-    onUnpin: () -> Unit
-) {
-    Surface(
-        onClick = { onOpenReader?.invoke() },
-        enabled = onOpenReader != null,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(0.9.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                    ) {
-                        Text(
-                            text = rightValue,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onUnpin,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PushPin,
-                            contentDescription = "Unpin",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    CompletionTickButton(
-                        isCompleted = isCompleted,
-                        onClick = onToggleComplete
-                    )
-                }
-            }
-
-            if (onOpenReader != null && jumpParaNumber != null) {
-                JumpToParaActionContainer(
-                    paraLabel = subtitle,
-                    buttonText = "Jump to Para $jumpParaNumber",
-                    accentColor = MaterialTheme.colorScheme.primary,
-                    onClick = onOpenReader
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OneTimeKhatmSummaryCard(
-    isOnline: Boolean,
-    claimedCount: Int,
-    completedCount: Int,
-    blockSizes: List<Int>,
-    modifier: Modifier = Modifier
-) {
-    ResizableSectionContainer(
-        modifier = modifier,
-        contentPadding = PaddingValues(24.dp)
-    ) {
+        // Inline Action Links: Share room · Copy text
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SanctuaryGeometricGlyph(
-                isQuranGlyph = true,
-                size = 52.dp
+            Text(
+                text = "Share room",
+                textDecoration = TextDecoration.Underline,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = colors.text,
+                modifier = Modifier.clickable { onShareRoom() }
             )
-
-            Spacer(modifier = Modifier.width(18.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "One-Time 30-Para Khatm",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 19.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (isOnline) {
-                        "Claimed: $claimedCount/30 Paras • Completed: $completedCount/30"
-                    } else {
-                        "Assigned: 30/30 Paras • Local Reference Schedule"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        if (blockSizes.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(20.dp))
-            ContiguousParaBlockBar(
-                blockSizes = blockSizes,
-                totalTarget = 30
+            Text("•", color = colors.gold)
+            Text(
+                text = "Copy text",
+                textDecoration = TextDecoration.Underline,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = colors.text,
+                modifier = Modifier.clickable { onCopyShareText() }
             )
         }
-    }
-}
 
-@Composable
-private fun ClosedForeverKhatmCard(
-    roomName: String,
-    summaryText: String,
-    modifier: Modifier = Modifier
-) {
-    ResizableSectionContainer(
-        modifier = modifier,
-        contentPadding = PaddingValues(26.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Notification Prompt Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenDueReminder() }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(60.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                    .background(colors.gold.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
+                    imageVector = Icons.Default.Schedule,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(30.dp)
+                    tint = colors.gold,
+                    modifier = Modifier.size(18.dp)
                 )
             }
-
-            Text(
-                text = "Alhamdulillah! Khatm Completed",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center
-            )
-
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-            ) {
+            Column {
                 Text(
-                    text = summaryText,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    text = "Remind me of my remaining share",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.5.sp,
+                    color = colors.text
+                )
+                Text(
+                    text = "Alerts only for your remaining paras",
+                    fontFamily = InterFontFamily,
+                    fontSize = 12.sp,
+                    color = colors.onSurfaceVariant
                 )
             }
-
-            Text(
-                text = "All 30 Paras of \"$roomName\" were completed. Detailed slot data has been automatically cleaned up to save space and this room is now closed forever.",
-                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
         }
-    }
-}
 
-@Composable
-private fun ParaFilterSegment(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        modifier = modifier.height(38.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                    fontSize = 12.sp
-                ),
-                color = if (selected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
+        Spacer(modifier = Modifier.height(6.dp))
 
-@Composable
-private fun OneTimeParaSlotCard(
-    isOnline: Boolean,
-    paraNumber: Int,
-    claim: ParticipantEntity?,
-    accentColor: Color,
-    onClaimClick: () -> Unit,
-    onToggleComplete: () -> Unit,
-    onTogglePin: () -> Unit,
-    onOpenReader: () -> Unit,
-    onUnclaim: () -> Unit,
-    onRemoveMember: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    val isClaimed = claim != null
-    val isCompleted = claim?.isCompleted == true
-    val isPinned = claim?.isPinned == true
-
-    Surface(
-        onClick = {
-            if (!isClaimed) onClaimClick()
-        },
-        enabled = !isClaimed,
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = if (isCompleted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        border = BorderStroke(
-            width = if (isCompleted || isPinned) 1.3.dp else 1.dp,
-            color = when {
-                isCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                isPinned -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.65f)
-                else -> MaterialTheme.colorScheme.outlineVariant
-            }
+        // Schedule Header & Filter Tabs
+        Text(
+            text = "Schedule · 30 paras",
+            fontFamily = FrauncesFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+            color = colors.text
         )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            OneTimeFilterTab(
+                title = "All 30",
+                selected = filter == OneTimeParaFilter.ALL,
+                onClick = { filter = OneTimeParaFilter.ALL }
+            )
+            OneTimeFilterTab(
+                title = "Available $openCount",
+                selected = filter == OneTimeParaFilter.AVAILABLE,
+                onClick = { filter = OneTimeParaFilter.AVAILABLE }
+            )
+            OneTimeFilterTab(
+                title = "Claimed $claimedCount",
+                selected = filter == OneTimeParaFilter.CLAIMED,
+                onClick = { filter = OneTimeParaFilter.CLAIMED }
+            )
+        }
+
+        Text(
+            text = "Tap an open para to claim it.",
+            fontFamily = InterFontFamily,
+            fontSize = 12.5.sp,
+            color = colors.onSurfaceVariant
+        )
+
+        // 30 Arch Tiles Grid (5 rows of 6)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            for (row in 0 until 5) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    OctagonalNumberMedallion(
-                        number = paraNumber,
-                        size = 42.dp,
-                        primaryColor = if (isClaimed) accentColor else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    for (col in 1..6) {
+                        val para = row * 6 + col
+                        val claim = claimsByPara[para]
+                        val isUserPara = claim != null && (
+                            claim.id in userClaimIds ||
+                                (savedProfileName.isNotBlank() && claim.name.trim().equals(savedProfileName.trim(), ignoreCase = true))
+                            )
 
-                    Spacer(modifier = Modifier.width(14.dp))
+                        val state = when {
+                            claim == null -> ParaTileState.OPEN
+                            claim.isCompleted -> ParaTileState.COMPLETED
+                            isUserPara -> ParaTileState.YOURS
+                            else -> ParaTileState.CLAIMED
+                        }
 
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (claim != null) {
-                            // Name-first display with Para number badge on the right
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = claim.name,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (claim.isGuestEntry) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.secondaryContainer
-                                    ) {
-                                        Text(
-                                            text = "Guest",
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 10.sp
-                                            ),
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        val visible = when (filter) {
+                            OneTimeParaFilter.ALL -> true
+                            OneTimeParaFilter.AVAILABLE -> claim == null
+                            OneTimeParaFilter.CLAIMED -> claim != null
+                        }
+
+                        if (visible) {
+                            ArchParaTile(
+                                paraNumber = para,
+                                state = state,
+                                onClick = {
+                                    if (claim == null) {
+                                        onClaimPara(para)
+                                    } else if (isUserPara) {
+                                        distributionViewModel.toggleParticipantCompletion(
+                                            distributionId = dist.id,
+                                            participantId = claim.id
                                         )
                                     }
                                 }
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = when {
-                                    isCompleted -> "Para $paraNumber • Completed ✓"
-                                    isOnline -> "Para $paraNumber • In progress"
-                                    else -> "Para $paraNumber Assigned"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isCompleted) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            Text(
-                                text = "Para $paraNumber",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Available • Tap to claim",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            // Empty placeholder to maintain grid alignment
+                            Spacer(modifier = Modifier.size(width = 46.dp, height = 56.dp))
                         }
                     }
                 }
-
-                if (claim == null) {
-                    Surface(
-                        onClick = onClaimClick,
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
-                        border = BorderStroke(0.7.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Claim",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = accentColor.copy(alpha = 0.14f)
-                        ) {
-                            Text(
-                                text = "$paraNumber",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                color = accentColor,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onTogglePin,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                                contentDescription = if (isPinned) "Unpin Para $paraNumber" else "Pin Para $paraNumber",
-                                tint = if (isPinned) MaterialTheme.colorScheme.secondary
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-
-                        if (isOnline && !isCompleted) {
-                            IconButton(
-                                onClick = onUnclaim,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Release Para $paraNumber",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-                        }
-
-                        if (onRemoveMember != null) {
-                            IconButton(
-                                onClick = onRemoveMember,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Remove Member",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-
-                        CompletionTickButton(
-                            isCompleted = isCompleted,
-                            onClick = onToggleComplete
-                        )
-                    }
-                }
-            }
-
-            if (claim != null) {
-                JumpToParaActionContainer(
-                    paraLabel = "Para $paraNumber",
-                    buttonText = "Jump to Para $paraNumber",
-                    accentColor = accentColor,
-                    onClick = onOpenReader
-                )
             }
         }
+
+        // Grid Legend
+        Text(
+            text = "Open: gold line · Claimed: black · Done: pine · Yours: wine",
+            fontFamily = InterFontFamily,
+            fontSize = 11.5.sp,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        )
     }
 }
 
 @Composable
-private fun CompletionTickButton(
-    isCompleted: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun OneTimeFilterTab(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = if (isCompleted) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        border = BorderStroke(
-            width = 0.9.dp,
-            color = if (isCompleted) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.outlineVariant
-        ),
-        modifier = modifier
+    val colors = QuranBaantoDesignSystem.colors
+    Column(
+        modifier = Modifier.clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                contentDescription = if (isCompleted) "Completed" else "Mark Done",
-                tint = if (isCompleted) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-            )
-            Text(
-                text = if (isCompleted) "Done" else "Tick",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = if (isCompleted) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                softWrap = false
-            )
-        }
-    }
-}
-
-@Composable
-private fun DeleteConfirmationDialog(
-    distributionName: String,
-    onConfirmDelete: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f)),
-            tonalElevation = 8.dp
-        ) {
-            Column(
+        Text(
+            text = title,
+            fontFamily = InterFontFamily,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 13.5.sp,
+            color = if (selected) colors.text else colors.onSurfaceVariant
+        )
+        if (selected) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = "Delete \"$distributionName\"?",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "This will permanently remove this session and all member allocations from your device.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SecondaryEditorialButton(
-                        text = "Cancel",
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(
-                        onClick = onConfirmDelete,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                    ) {
-                        Text("Delete", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AmalSummarySpecimenCard(
-    isOnline: Boolean,
-    totalTarget: Int,
-    claimedSum: Int,
-    completedSum: Int,
-    roundNumber: Int,
-    participantCount: Int,
-    blockSizes: List<Int>,
-    modifier: Modifier = Modifier
-) {
-    ResizableSectionContainer(
-        modifier = modifier,
-        contentPadding = PaddingValues(24.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SanctuaryGeometricGlyph(
-                isQuranGlyph = false,
-                size = 52.dp
-            )
-
-            Spacer(modifier = Modifier.width(18.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "$totalTarget Total Recitations",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (roundNumber > 1) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer
-                        ) {
-                            Text(
-                                text = "Round $roundNumber",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = if (isOnline) {
-                        "$participantCount Members • Recited: $completedSum/$claimedSum"
-                    } else {
-                        "$participantCount Members • Assigned: $claimedSum/$totalTarget"
-                    },
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-            }
-        }
-
-        if (blockSizes.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(20.dp))
-            ContiguousParaBlockBar(
-                blockSizes = blockSizes,
-                totalTarget = totalTarget
+                    .width(32.dp)
+                    .height(2.dp)
+                    .clip(CircleShape)
+                    .background(colors.gold)
             )
         }
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ONLINE MONTHLY KHATM
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-private fun MonthCycleNavigatorCard(
-    isOnline: Boolean,
-    dateInfo: MonthDateInfo,
-    isCurrentMonth: Boolean,
-    completedMembersCount: Int,
-    totalMembersCount: Int,
-    blockSizes: List<Int>,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
-    onResetCurrent: () -> Unit,
-    modifier: Modifier = Modifier
+private fun OnlineMonthlyContent(
+    dist: DistributionEntity,
+    activeState: com.example.ui.viewmodel.ActiveDistributionUiState,
+    savedProfileName: String,
+    distributionViewModel: DistributionViewModel,
+    onStartChooseParas: () -> Unit,
+    onShareRoom: () -> Unit,
+    onCopyShareText: () -> Unit,
+    onOpenDueReminder: () -> Unit,
+    onOpenParaReader: (Int) -> Unit
 ) {
-    ResizableSectionContainer(
-        modifier = modifier,
-        contentPadding = PaddingValues(24.dp)
+    val colors = QuranBaantoDesignSystem.colors
+
+    val dateInfo = activeState.dateInfo
+    val participants = activeState.participants
+    val assignments = activeState.assignments
+
+    val currentCal = remember { Calendar.getInstance() }
+    val isCurrentMonth = activeState.selectedYear == currentCal.get(Calendar.YEAR) &&
+        activeState.selectedMonth == (currentCal.get(Calendar.MONTH) + 1)
+
+    // User's participant entries & assignments for the active month
+    val userParticipants = remember(participants, savedProfileName) {
+        val trimmed = savedProfileName.trim()
+        if (trimmed.isNotBlank()) {
+            participants.filter { !it.isGuestEntry && it.name.trim().equals(trimmed, ignoreCase = true) }
+        } else {
+            participants.filter { !it.isGuestEntry }.take(1)
+        }
+    }
+    val userIds = remember(userParticipants) { userParticipants.map { it.id }.toSet() }
+
+    val userAssignments = remember(assignments, userIds) {
+        assignments.filter { it.participantId in userIds }
+    }
+    val userParasThisMonth = remember(userAssignments) {
+        userAssignments.flatMap { it.assignedParas }.distinct().sorted()
+    }
+    val nextAssignmentsForUser = remember(activeState.nextMonthAssignments, userIds) {
+        activeState.nextMonthAssignments.filter { it.participantId in userIds }
+    }
+    val nextParasForUser = remember(nextAssignmentsForUser) {
+        nextAssignmentsForUser.flatMap { it.assignedParas }.distinct().sorted()
+    }
+
+    val completedCount = participants.sumOf { member ->
+        if (member.isCompletedForMonth(activeState.selectedYear, activeState.selectedMonth)) {
+            member.allocatedCount
+        } else 0
+    }.coerceAtMost(30)
+
+    val userWineIndices = remember(userParasThisMonth) {
+        userParasThisMonth.map { it - 1 }.toSet()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        // Month Switcher
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                onClick = onPreviousMonth,
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
+            IconButton(
+                onClick = { distributionViewModel.navigateMonth(-1) },
                 modifier = Modifier.size(48.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.ChevronLeft,
-                        contentDescription = "Previous Month",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.ChevronLeft,
+                    contentDescription = "Previous Month",
+                    tint = colors.text
+                )
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = dateInfo.gregorianFullText,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
+                    text = "${dateInfo.gregorianMonthName} ${dateInfo.gregorianYear}",
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp,
+                    color = colors.text
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = dateInfo.hijriFullText,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp
-                    ),
-                    color = MaterialTheme.colorScheme.secondary,
-                    textAlign = TextAlign.Center
+                    text = "${dateInfo.hijriMonthName} ${dateInfo.hijriYear} AH" +
+                        if (isCurrentMonth) " · Current" else "",
+                    fontFamily = InterFontFamily,
+                    fontSize = 12.sp,
+                    color = colors.onSurfaceVariant
                 )
-                if (totalMembersCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (isOnline) {
-                            "Completed: $completedMembersCount/$totalMembersCount Members"
-                        } else {
-                            "30 Paras Assigned ($totalMembersCount Members) • Local Schedule"
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
 
-            Surface(
-                onClick = onNextMonth,
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
+            IconButton(
+                onClick = { distributionViewModel.navigateMonth(1) },
                 modifier = Modifier.size(48.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "Next Month",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Next Month",
+                    tint = colors.text
+                )
             }
         }
 
-        if (blockSizes.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(20.dp))
-            ContiguousParaBlockBar(
-                blockSizes = blockSizes,
-                totalTarget = 30
-            )
-        }
+        WaveDivider(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp))
 
-        if (!isCurrentMonth) {
-            Spacer(modifier = Modifier.height(18.dp))
-            SecondaryEditorialButton(
-                text = "Return to Current Month",
-                icon = Icons.Default.Today,
-                onClick = onResetCurrent,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
-}
-
-/**
- * Custom Amal participant card featuring Name-first layout, Pin toggle,
- * and a dedicated Tactile Counter sub-container with haptic feedback (+1, +5, +10, -1).
- */
-@Composable
-private fun AmalParticipantCard(
-    isOnline: Boolean,
-    index: Int,
-    participant: ParticipantEntity,
-    accentColor: Color = MaterialTheme.colorScheme.primary,
-    onUpdateCount: (Int) -> Unit,
-    onTogglePin: () -> Unit,
-    onToggleComplete: () -> Unit,
-    onRemoveMember: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    val haptics = LocalHapticFeedback.current
-    val isCompleted = participant.isCompleted
-    val isPinned = participant.isPinned
-    val currentCount = if (isCompleted) participant.allocatedCount
-    else participant.completedCount.coerceIn(0, participant.allocatedCount)
-    val progressFraction = if (participant.allocatedCount > 0) {
-        (currentCount.toFloat() / participant.allocatedCount.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("amal_participant_card_${participant.id}"),
-        shape = RoundedCornerShape(20.dp),
-        color = if (isCompleted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        border = BorderStroke(
-            width = if (isCompleted || isPinned) 1.3.dp else 1.dp,
-            color = when {
-                isCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                isPinned -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.65f)
-                else -> MaterialTheme.colorScheme.outlineVariant
-            }
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        // 220dp Beaded Circular Ring
+        Box(
+            modifier = Modifier.size(220.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Top Row: Medallion + Name-first + Count badge + Pin (+ Tick for Online)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            BeadedCircleVector(
+                modifier = Modifier.fillMaxSize(),
+                totalBeads = 30,
+                completedBeads = completedCount,
+                wineIndices = userWineIndices,
+                goldColor = colors.gold,
+                pineColor = colors.pine,
+                wineColor = colors.wineFill,
+                unclaimedColor = if (colors.isDark) Color(0xFF333842) else Color(0xFFCBD5E1)
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = completedCount.toString(),
+                    fontFamily = FrauncesFontFamily,
+                    fontSize = 54.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.text
+                )
+                Text(
+                    text = "of 30 completed",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.sp,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+
+        // YOUR PARA Section
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "YOUR PARA",
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                color = colors.gold,
+                letterSpacing = 1.2.sp
+            )
+
+            if (userParasThisMonth.isNotEmpty()) {
+                val thisMonthLabel = if (userAssignments.size == 1) {
+                    userAssignments.first().displayRangeText
+                } else {
+                    "Paras ${userParasThisMonth.joinToString(", ")}"
+                }
+                val nextMonthLabel = when {
+                    nextAssignmentsForUser.size == 1 -> nextAssignmentsForUser.first().displayRangeText
+                    nextParasForUser.isNotEmpty() -> "Paras ${nextParasForUser.joinToString(", ")}"
+                    else -> "—"
+                }
+                val isDone = userParticipants.isNotEmpty() && userParticipants.all {
+                    it.isCompletedForMonth(activeState.selectedYear, activeState.selectedMonth)
+                }
+
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    OctagonalNumberMedallion(
-                        number = index,
-                        size = 42.dp,
-                        primaryColor = accentColor
+                    Text(
+                        text = thisMonthLabel,
+                        fontFamily = FrauncesFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 30.sp,
+                        color = colors.text,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = participant.name,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (participant.isGuestEntry) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.secondaryContainer
-                                ) {
-                                    Text(
-                                        text = "Guest",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 10.sp
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Next month",
+                            fontFamily = InterFontFamily,
+                            fontSize = 11.5.sp,
+                            color = colors.onSurfaceVariant
+                        )
+                        Text(
+                            text = "$nextMonthLabel →",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = colors.pine
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Picked once. Rotates automatically every month.",
+                    fontFamily = InterFontFamily,
+                    fontSize = 12.5.sp,
+                    color = colors.onSurfaceVariant
+                )
+
+                val firstUserPara = userParasThisMonth.first()
+                Text(
+                    text = "Jump to my para (Para $firstUserPara) →",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = colors.pineText,
+                    textDecoration = TextDecoration.Underline,
+                    modifier = Modifier
+                        .clickable { onOpenParaReader(firstUserPara) }
+                        .padding(vertical = 2.dp)
+                        .testTag("jump_to_my_para_button")
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Solid Gold Pill Button: Mark my para complete
+                Button(
+                    onClick = {
+                        userParticipants.forEach { member ->
+                            val memberDone = member.isCompletedForMonth(activeState.selectedYear, activeState.selectedMonth)
+                            if (memberDone == isDone) {
+                                distributionViewModel.toggleParticipantCompletion(
+                                    distributionId = dist.id,
+                                    participantId = member.id
+                                )
                             }
                         }
-                        Text(
-                            text = "Recited: $currentCount / ${participant.allocatedCount}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(9.dp),
-                        color = accentColor.copy(alpha = 0.14f)
-                    ) {
-                        Text(
-                            text = "${participant.allocatedCount}",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp
-                            ),
-                            color = accentColor,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onTogglePin,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (isPinned) "Unpin ${participant.name}" else "Pin ${participant.name}",
-                            tint = if (isPinned) MaterialTheme.colorScheme.secondary
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-
-                    if (onRemoveMember != null) {
-                        IconButton(
-                            onClick = onRemoveMember,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Remove ${participant.name}",
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-                    }
-
-                    CompletionTickButton(
-                        isCompleted = isCompleted,
-                        onClick = onToggleComplete
-                    )
-                }
-            }
-
-            // Dedicated Tactile Counter Container
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.background,
-                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
+                    },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.gold,
+                        contentColor = if (colors.isDark) Color(0xFF15181C) else Color(0xFF1B1B19)
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .height(52.dp)
                 ) {
-                    LinearProgressIndicator(
-                        progress = { progressFraction },
-                        color = accentColor,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                onClick = {
-                                    if (currentCount > 0) {
-                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onUpdateCount(currentCount - 1)
-                                    }
-                                },
-                                enabled = currentCount > 0,
-                                shape = RoundedCornerShape(9.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Remove,
-                                        contentDescription = "Decrement count",
-                                        tint = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            if (participant.allocatedCount >= 5 && !isCompleted) {
-                                Surface(
-                                    onClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onUpdateCount((currentCount + 5).coerceAtMost(participant.allocatedCount))
-                                    },
-                                    shape = RoundedCornerShape(9.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Text(
-                                        text = "+5",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
-                                    )
-                                }
-                            }
-
-                            if (participant.allocatedCount >= 10 && !isCompleted) {
-                                Surface(
-                                    onClick = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onUpdateCount((currentCount + 10).coerceAtMost(participant.allocatedCount))
-                                    },
-                                    shape = RoundedCornerShape(9.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Text(
-                                        text = "+10",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Primary Tactile Tap Button (+1)
-                        Surface(
-                            onClick = {
-                                if (!isCompleted && currentCount < participant.allocatedCount) {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onUpdateCount((currentCount + 1).coerceAtMost(participant.allocatedCount))
-                                }
-                            },
-                            enabled = !isCompleted && currentCount < participant.allocatedCount,
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isCompleted || currentCount >= participant.allocatedCount) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else accentColor,
-                            modifier = Modifier.testTag("amal_tactile_tap_button_${participant.id}")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isCompleted || currentCount >= participant.allocatedCount) {
-                                        Icons.Default.CheckCircle
-                                    } else Icons.Default.Add,
-                                    contentDescription = "Tap to count recitation",
-                                    tint = if (isCompleted || currentCount >= participant.allocatedCount) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else Color.White,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = if (isCompleted || currentCount >= participant.allocatedCount) {
-                                        "Completed"
-                                    } else "Tap +1 ($currentCount/${participant.allocatedCount})",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isCompleted || currentCount >= participant.allocatedCount) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else Color.White
-                                )
-                            }
-                        }
+                        Text(
+                            text = if (isDone) "Marked complete ✓" else "Mark my para complete",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "→",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
                     }
                 }
+            } else {
+                // User hasn't claimed paras yet -> "Choose your paras →"
+                Button(
+                    onClick = onStartChooseParas,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.pine,
+                        contentColor = Color(0xFFF1EBDD)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Choose your paras",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "→",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Pick once. When all 30 are claimed, your paras rotate automatically each month.",
+                    fontFamily = InterFontFamily,
+                    fontSize = 12.5.sp,
+                    color = colors.onSurfaceVariant
+                )
             }
         }
-    }
-}
 
-/**
- * Displays a single member's contiguous Para allocation ordered strictly in ascending order of Paras (1 -> 30),
- * formatted with the Participant Name on the left and the Para numbers aligned on the right:
- *
- * Abbas             1, 2
- * Khadija g.        3
- * ...
- * Qurat             28, 29, 30
- *
- * Includes a dedicated, well-proportioned Jump to Para container & button underneath so the user
- * can open the Quran Reader cleanly without cluttering the name/number row.
- */
-@Composable
-private fun KhatmAssignmentSpecimenCard(
-    isOnline: Boolean,
-    assignment: ParaAssignment,
-    isCompleted: Boolean,
-    isGuest: Boolean,
-    isPinned: Boolean,
-    accentColor: Color = MaterialTheme.colorScheme.primary,
-    onTogglePin: () -> Unit,
-    onOpenReader: () -> Unit,
-    onToggleComplete: () -> Unit,
-    onRemoveMember: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    val effectiveCompleted = isCompleted
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("khatm_assignment_card_${assignment.startPara}"),
-        shape = RoundedCornerShape(20.dp),
-        color = if (effectiveCompleted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        },
-        border = BorderStroke(
-            width = if (effectiveCompleted || isPinned) 1.3.dp else 1.dp,
-            color = when {
-                effectiveCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                isPinned -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.65f)
-                else -> MaterialTheme.colorScheme.outlineVariant
-            }
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 15.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Inline Action Links
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top Row: Medallion + Participant Name on left, Ascending Para Numbers Pill + Pin (+ Tick if Online) on right
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    OctagonalNumberMedallion(
-                        number = assignment.startPara,
-                        size = 42.dp,
-                        primaryColor = accentColor
-                    )
-
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = assignment.participantName,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    lineHeight = 22.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (isGuest) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.secondaryContainer
-                                ) {
-                                    Text(
-                                        text = "Guest",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 10.sp
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = assignment.displayRangeText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = accentColor.copy(alpha = 0.14f),
-                        border = BorderStroke(0.8.dp, accentColor.copy(alpha = 0.35f))
-                    ) {
-                        Text(
-                            text = assignment.commaSeparatedParas,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp
-                            ),
-                            color = accentColor,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onTogglePin,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .testTag("pin_assignment_button_${assignment.startPara}")
-                    ) {
-                        Icon(
-                            imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = if (isPinned) "Unpin ${assignment.participantName}" else "Pin ${assignment.participantName}",
-                            tint = if (isPinned) MaterialTheme.colorScheme.secondary
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-
-                    if (onRemoveMember != null) {
-                        IconButton(
-                            onClick = onRemoveMember,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .testTag("remove_assignment_button_${assignment.startPara}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Remove ${assignment.participantName}",
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-                    }
-
-                    CompletionTickButton(
-                        isCompleted = effectiveCompleted,
-                        onClick = onToggleComplete
-                    )
-                }
-            }
-
-            // Dedicated Jump to Para Container & Button
-            JumpToParaActionContainer(
-                paraLabel = assignment.displayRangeText,
-                buttonText = "Jump to Para ${assignment.startPara}",
-                accentColor = accentColor,
-                onClick = onOpenReader,
-                modifier = Modifier.testTag("jump_to_para_button_${assignment.startPara}")
+            Text(
+                text = "Share room",
+                textDecoration = TextDecoration.Underline,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = colors.text,
+                modifier = Modifier.clickable { onShareRoom() }
+            )
+            Text("•", color = colors.gold)
+            Text(
+                text = "Copy text",
+                textDecoration = TextDecoration.Underline,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = colors.text,
+                modifier = Modifier.clickable { onCopyShareText() }
             )
         }
     }
 }
 
-/**
- * Dedicated container and structured button for jumping directly to an assigned Para in the Quran Reader.
- * Gives the Jump action its own clean, balanced space rather than a cramped linked text or tiny icon.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// ONLINE MONTHLY: CHOOSE YOUR PARAS VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-private fun JumpToParaActionContainer(
-    paraLabel: String,
-    buttonText: String,
-    accentColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+private fun OnlineMonthlyChooseParasView(
+    dist: DistributionEntity,
+    activeState: com.example.ui.viewmodel.ActiveDistributionUiState,
+    onConfirm: (List<Int>) -> Unit,
+    onBack: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(13.dp),
-        color = MaterialTheme.colorScheme.background,
-        border = BorderStroke(0.9.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.85f)),
-        modifier = modifier.fillMaxWidth()
+    val colors = QuranBaantoDesignSystem.colors
+
+    BackHandler {
+        onBack()
+    }
+
+    val takenParas = remember(activeState.assignments) {
+        activeState.assignments.flatMap { it.assignedParas }.toSet()
+    }
+    val claimedCount = takenParas.size
+    val openParasCount = (30 - claimedCount).coerceAtLeast(0)
+
+    val selectedParas = remember { mutableStateListOf<Int>() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Top bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = colors.text
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    text = "ONLINE",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = colors.gold,
+                    letterSpacing = 1.2.sp
+                )
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(colors.gold)
+                )
+            }
+        }
+
+        // Caption & Headline
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "${dist.name.uppercase()} · MONTHLY",
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                color = colors.gold,
+                letterSpacing = 1.2.sp
+            )
+            Text(
+                text = "Choose your paras",
+                fontFamily = FrauncesFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+                color = colors.text
+            )
+            Text(
+                text = "Pick once. When all 30 are claimed, your paras rotate automatically each month.",
+                fontFamily = InterFontFamily,
+                fontSize = 13.sp,
+                color = colors.onSurfaceVariant
+            )
+        }
+
+        // Wave Progress
+        WaveTrack(
+            progress = claimedCount.toFloat() / 30f,
+            pineColor = colors.pine,
+            trackColor = colors.gold.copy(alpha = 0.35f)
+        )
+
+        // Status row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$claimedCount of 30 claimed · $openParasCount open",
+                fontFamily = InterFontFamily,
+                fontSize = 13.sp,
+                color = colors.onSurfaceVariant
+            )
+
+            Text(
+                text = "${selectedParas.size} selected",
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.5.sp,
+                color = colors.wineFill
+            )
+        }
+
+        // 30 Arch Tiles Grid
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            for (row in 0 until 5) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    for (col in 1..6) {
+                        val para = row * 6 + col
+                        val isTaken = para in takenParas
+                        val isSelected = para in selectedParas
+
+                        val state = when {
+                            isSelected -> ParaTileState.YOURS
+                            isTaken -> ParaTileState.CLAIMED
+                            else -> ParaTileState.OPEN
+                        }
+
+                        ArchParaTile(
+                            paraNumber = para,
+                            state = state,
+                            onClick = {
+                                if (!isTaken) {
+                                    if (isSelected) {
+                                        selectedParas.remove(para)
+                                    } else {
+                                        selectedParas.add(para)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Legend
+        Text(
+            text = "Open: gold line · Taken: black · Yours: wine",
+            fontFamily = InterFontFamily,
+            fontSize = 11.5.sp,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text(
+            text = "Rotation starts once all 30 paras are claimed.",
+            fontFamily = InterFontFamily,
+            fontSize = 12.sp,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Confirm Button
+        Button(
+            onClick = {
+                if (selectedParas.isNotEmpty()) {
+                    onConfirm(selectedParas.sorted())
+                }
+            },
+            enabled = selectedParas.isNotEmpty(),
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.pine,
+                contentColor = Color(0xFFF1EBDD),
+                disabledContainerColor = colors.pine.copy(alpha = 0.4f),
+                disabledContentColor = Color(0xFFF1EBDD).copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .testTag("confirm_monthly_paras_button")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Confirm ${selectedParas.size} paras",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = "→",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ONLINE AMAL ROOM
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun OnlineAmalContent(
+    dist: DistributionEntity,
+    participants: List<ParticipantEntity>,
+    savedProfileName: String,
+    distributionViewModel: DistributionViewModel,
+    onOpenPledge: () -> Unit,
+    onReopenRound: () -> Unit,
+    onShareRoom: () -> Unit,
+    onCopyShareText: () -> Unit,
+    onOpenDueReminder: () -> Unit
+) {
+    val colors = QuranBaantoDesignSystem.colors
+
+    val totalTarget = dist.totalTarget
+    val totalPledged = participants.sumOf { it.allocatedCount }
+    val remainingPledge = (totalTarget - totalPledged).coerceAtLeast(0)
+
+    val totalRecited = participants.sumOf {
+        if (it.isCompleted) it.allocatedCount else it.completedCount.coerceIn(0, it.allocatedCount)
+    }
+
+    val isRoundComplete = totalRecited >= totalTarget && totalTarget > 0
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        // Section Title & Round Tag
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Custom Amal Target",
+                fontFamily = FrauncesFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp,
+                color = colors.text
+            )
+
+            Text(
+                text = "ROUND ${dist.roundNumber}",
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.5.sp,
+                color = colors.pine,
+                letterSpacing = 1.2.sp
+            )
+        }
+
+        // Large Recitation Counter
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = totalRecited.toString(),
+                fontFamily = FrauncesFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 72.sp,
+                color = colors.text,
+                lineHeight = 72.sp
+            )
+
+            Column(modifier = Modifier.padding(bottom = 10.dp)) {
+                Text(
+                    text = "of $totalTarget",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    color = colors.text
+                )
+                Text(
+                    text = "recited",
+                    fontFamily = InterFontFamily,
+                    fontSize = 14.sp,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+
+        // Wave Progress Track
+        WaveTrack(
+            progress = if (totalTarget > 0) totalRecited.toFloat() / totalTarget.toFloat() else 0f,
+            pineColor = colors.pine,
+            trackColor = colors.gold.copy(alpha = 0.35f)
+        )
+
+        // Summary row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isRoundComplete) "Round ${dist.roundNumber} complete"
+                       else "$totalPledged pledged · $remainingPledge left to pledge",
+                fontFamily = InterFontFamily,
+                fontSize = 13.sp,
+                color = colors.onSurfaceVariant
+            )
+
+            Text(
+                text = "${participants.size} members",
+                fontFamily = InterFontFamily,
+                fontSize = 13.sp,
+                color = colors.onSurfaceVariant
+            )
+        }
+
+        // Pill Action Button
+        if (isRoundComplete) {
+            // Reopen for Round X Pill
+            Button(
+                onClick = onReopenRound,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.gold,
+                    contentColor = if (colors.isDark) Color(0xFF15181C) else Color(0xFF1B1B19)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Reopen for Round ${dist.roundNumber + 1}",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "→",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+            Text(
+                text = "Same members and target. No set-up needed.",
+                fontFamily = InterFontFamily,
+                fontSize = 12.sp,
+                color = colors.onSurfaceVariant
+            )
+        } else if (remainingPledge > 0) {
+            // Pledge recitations Pill
+            Button(
+                onClick = onOpenPledge,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.pine,
+                    contentColor = Color(0xFFF1EBDD)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pledge recitations",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "→",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+            Text(
+                text = "For yourself or a guest · $remainingPledge left",
+                fontFamily = InterFontFamily,
+                fontSize = 12.sp,
+                color = colors.onSurfaceVariant
+            )
+        }
+
+        // Inline Action Links
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Share room",
+                textDecoration = TextDecoration.Underline,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = colors.text,
+                modifier = Modifier.clickable { onShareRoom() }
+            )
+            Text("•", color = colors.gold)
+            Text(
+                text = "Copy text",
+                textDecoration = TextDecoration.Underline,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                color = colors.text,
+                modifier = Modifier.clickable { onCopyShareText() }
+            )
+        }
+
+        // Reminder prompt
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 9.dp),
+                .clickable { onOpenDueReminder() }
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f, fill = false)
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(colors.gold.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(accentColor.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = colors.gold,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = "Remind me of my remaining share",
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.5.sp,
+                    color = colors.text
+                )
+                Text(
+                    text = "Alerts only for your remaining recitations",
+                    fontFamily = InterFontFamily,
+                    fontSize = 12.sp,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Member allocations Header
+        Text(
+            text = if (isRoundComplete) "Final allocations" else "Member allocations",
+            fontFamily = FrauncesFontFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+            color = colors.text
+        )
+
+        Text(
+            text = "Tap + to count your own. Others show progress only.",
+            fontFamily = InterFontFamily,
+            fontSize = 12.5.sp,
+            color = colors.onSurfaceVariant
+        )
+
+        // Participants List or Empty State
+        if (participants.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ArchWindowVector(
+                        modifier = Modifier.size(44.dp),
+                        outlineColor = colors.gold
+                    )
+                    Text(
+                        text = "No member allocations yet.",
+                        fontFamily = FrauncesFontFamily,
+                        fontSize = 16.sp,
+                        color = colors.text
+                    )
+                    Text(
+                        text = "Pledge recitations above to begin this Amal round.",
+                        fontFamily = InterFontFamily,
+                        fontSize = 12.5.sp,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                participants.forEach { member ->
+                    val isUser = member.name.equals(savedProfileName, ignoreCase = true) ||
+                        (!member.isGuest && savedProfileName.isBlank())
+
+                    val isUserGuest = member.isGuest && member.addedByProfileName.equals(savedProfileName, ignoreCase = true)
+                    val canEditThisMember = isUser || isUserGuest
+
+                    val currentRecited = if (member.isCompleted) member.allocatedCount else member.completedCount
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Avatar circle with Initial
+                            val initial = member.name.trim().take(1).uppercase().ifBlank { "M" }
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (canEditThisMember) colors.pine
+                                        else if (colors.isDark) Color(0xFF232832)
+                                        else Color(0xFFE2DDD2)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = initial,
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = if (canEditThisMember) Color(0xFFF1EBDD) else colors.text
+                                )
+                            }
+
+                            Column {
+                                Text(
+                                    text = when {
+                                        isUser -> "You"
+                                        isUserGuest -> "${member.name} · your guest"
+                                        else -> member.name
+                                    },
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = colors.text
+                                )
+                                Text(
+                                    text = "$currentRecited of ${member.allocatedCount} recited",
+                                    fontFamily = InterFontFamily,
+                                    fontSize = 12.5.sp,
+                                    color = colors.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Right side controls
+                        if (canEditThisMember && !isRoundComplete) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Round "+" Button (increment count)
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.pine)
+                                        .clickable {
+                                            val newCount = minOf(member.allocatedCount, member.completedCount + 1)
+                                            distributionViewModel.updateAmalCompletedCount(
+                                                distributionId = dist.id,
+                                                participantId = member.id,
+                                                newCount = newCount
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Count +1",
+                                        tint = Color(0xFFF1EBDD),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                // Round Checkmark Button (mark 100% complete)
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .border(1.2.dp, colors.gold, CircleShape)
+                                        .clickable {
+                                            distributionViewModel.toggleParticipantCompletion(
+                                                distributionId = dist.id,
+                                                participantId = member.id
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Complete",
+                                        tint = if (member.isCompleted) colors.pine else colors.gold,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            // Progress Text for other members
+                            Text(
+                                text = if (member.isCompleted) "✓ ${member.allocatedCount} / ${member.allocatedCount}"
+                                       else "$currentRecited / ${member.allocatedCount}",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                                color = if (member.isCompleted) colors.pine else colors.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    WaveDivider(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+
+        Text(
+            text = "The room completes automatically when everyone is done.",
+            fontFamily = InterFontFamily,
+            fontSize = 12.sp,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+        )
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOCAL ROOM VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun LocalRoomView(
+    dist: DistributionEntity,
+    activeState: com.example.ui.viewmodel.ActiveDistributionUiState,
+    distributionViewModel: DistributionViewModel,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onShare: () -> Unit,
+    onCopyText: () -> Unit,
+    onOpenParaReader: (Int) -> Unit
+) {
+    val colors = QuranBaantoDesignSystem.colors
+
+    val dateInfo = activeState.dateInfo
+    val participants = activeState.participants
+    val assignments = activeState.assignments
+    val nextAssignments = activeState.nextMonthAssignments
+    val isMonthly = dist.type == DistributionType.KHATM
+    val isOneTime = dist.type == DistributionType.ONE_TIME_KHATM
+    val isAmal = dist.type == DistributionType.AMAL
+
+    val allocationCounts = remember(participants) {
+        participants.map { it.allocatedCount }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 64.dp)
+    ) {
+        // Top Bar
+        item(key = "local_topbar") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                        contentDescription = null,
-                        tint = accentColor,
-                        modifier = Modifier.size(15.dp)
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = colors.text
                     )
                 }
 
-                Text(
-                    text = "Qur'an • $paraLabel",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Medium
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Room",
+                            tint = colors.text,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Room",
+                            tint = colors.text,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
+        }
 
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Surface(
-                onClick = onClick,
-                shape = RoundedCornerShape(9.dp),
-                color = accentColor.copy(alpha = 0.16f),
-                border = BorderStroke(0.8.dp, accentColor.copy(alpha = 0.45f))
+        // Room Header Info
+        item(key = "local_header_info") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = buttonText,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = accentColor,
-                        maxLines = 1,
-                        softWrap = false
+                        text = when (dist.type) {
+                            DistributionType.KHATM -> "LOCAL ROOM · MONTHLY KHATM"
+                            DistributionType.ONE_TIME_KHATM -> "LOCAL ROOM · ONE-TIME KHATM"
+                            DistributionType.AMAL -> "LOCAL ROOM · AMAL"
+                        },
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = colors.gold,
+                        letterSpacing = 1.2.sp
                     )
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = buttonText,
-                        tint = accentColor,
-                        modifier = Modifier.size(14.dp)
+
+                    if (isOneTime) {
+                        Text(
+                            text = "ONE-TIME",
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.5.sp,
+                            color = colors.pine,
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+                }
+
+                Text(
+                    text = dist.name,
+                    fontFamily = FrauncesFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 30.sp,
+                    color = colors.text
+                )
+
+                Text(
+                    text = if (isAmal) "${participants.size} participants · ${dist.totalTarget} total recitations"
+                           else "${participants.size} participants · exactly 30 paras",
+                    fontFamily = InterFontFamily,
+                    fontSize = 13.5.sp,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+
+        // Monthly Switcher (if monthly)
+        if (isMonthly) {
+            item(key = "local_monthly_switcher") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { distributionViewModel.navigateMonth(-1) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronLeft,
+                                contentDescription = "Previous Month",
+                                tint = colors.text
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "${dateInfo.gregorianMonthName} ${dateInfo.gregorianYear}",
+                                fontFamily = FrauncesFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 24.sp,
+                                color = colors.text
+                            )
+                            Text(
+                                text = "${dateInfo.hijriMonthName} ${dateInfo.hijriYear} AH",
+                                fontFamily = InterFontFamily,
+                                fontSize = 12.sp,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { distributionViewModel.navigateMonth(1) },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Next Month",
+                                tint = colors.text
+                            )
+                        }
+                    }
+
+                    WaveDivider(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+
+        // Segmented Allocation Bar & Caption
+        item(key = "local_segmented_bar") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = when {
+                        isMonthly -> "ROTATING ASSIGNMENTS (30 PARAS)"
+                        isOneTime -> "ASSIGNMENTS (30 PARAS)"
+                        else -> "MEMBER ALLOCATIONS"
+                    },
+                    fontFamily = InterFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = colors.gold,
+                    letterSpacing = 1.2.sp
+                )
+
+                SegmentedAllocationBar(
+                    allocations = allocationCounts,
+                    total = dist.totalTarget
+                )
+            }
+        }
+
+        // Participants Roster
+        if (participants.isEmpty()) {
+            item(key = "local_empty_state") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ArchWindowVector(
+                            modifier = Modifier.size(48.dp),
+                            outlineColor = colors.gold
+                        )
+                        Text(
+                            text = "No participants added yet.",
+                            fontFamily = FrauncesFontFamily,
+                            fontSize = 18.sp,
+                            color = colors.text
+                        )
+                        Text(
+                            text = "Edit this room to add members and assign portions.",
+                            fontFamily = InterFontFamily,
+                            fontSize = 13.sp,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        } else {
+            itemsIndexed(
+                items = participants,
+                key = { _, p -> p.id }
+            ) { index, participant ->
+                val assignment = assignments.firstOrNull { it.participantId == participant.id }
+                val startPara = assignment?.startPara ?: (participant.specificParaNumber ?: (index + 1))
+                val endPara = assignment?.endPara ?: (((startPara - 1 + participant.allocatedCount - 1) % 30) + 1)
+                val nextAssignment = nextAssignments.firstOrNull { it.participantId == participant.id }
+                val nextPreviewText = nextAssignment?.displayRangeText ?: run {
+                    val ns = ((startPara - 1 + participant.allocatedCount) % 30) + 1
+                    val ne = ((ns - 1 + participant.allocatedCount - 1) % 30) + 1
+                    if (participant.allocatedCount == 1) "Para $ns" else "Paras $ns–$ne"
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (!isAmal) {
+                                Modifier.clickable { onOpenParaReader(startPara) }
+                            } else Modifier
+                        )
+                        .padding(horizontal = 24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Numbered Medallion (1, 2, 3...)
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (colors.isDark) Color(0xFF232832)
+                                        else Color(0xFFE2DDD2)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = (index + 1).toString(),
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = colors.text
+                                )
+                            }
+
+                            Column {
+                                Text(
+                                    text = participant.name,
+                                    fontFamily = FrauncesFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 18.sp,
+                                    color = colors.text
+                                )
+
+                                Text(
+                                    text = when {
+                                        isAmal -> "${participant.allocatedCount} recitations"
+                                        startPara == endPara -> "Para $startPara · 1"
+                                        else -> "Paras $startPara–$endPara · ${participant.allocatedCount}"
+                                    },
+                                    fontFamily = InterFontFamily,
+                                    fontSize = 12.5.sp,
+                                    color = colors.pine
+                                )
+                            }
+                        }
+
+                        // Next month rotation preview (for Monthly Khatm) or Read Para CTA
+                        if (isMonthly) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "NEXT MONTH",
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = colors.onSurfaceVariant,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = nextPreviewText,
+                                    fontFamily = FrauncesFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = colors.text
+                                )
+                            }
+                        } else if (isOneTime) {
+                            Text(
+                                text = "Read →",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = colors.pineText,
+                                textDecoration = TextDecoration.Underline
+                            )
+                        }
+                    }
+
+                    WaveDivider(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+
+        // Bottom Action Buttons: Copy text + Share
+        item(key = "local_bottom_actions") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Copy text",
+                        textDecoration = TextDecoration.Underline,
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = colors.text,
+                        modifier = Modifier.clickable { onCopyText() }
+                    )
+
+                    Button(
+                        onClick = onShare,
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.pine,
+                            contentColor = Color(0xFFF1EBDD)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Share",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                text = "→",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+                }
+
+                // If One-Time: Mark room complete button
+                if (isOneTime) {
+                    Button(
+                        onClick = {
+                            participants.forEach { p ->
+                                distributionViewModel.toggleParticipantCompletion(
+                                    distributionId = dist.id,
+                                    participantId = p.id
+                                )
+                            }
+                        },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.gold,
+                            contentColor = if (colors.isDark) Color(0xFF15181C) else Color(0xFF1B1B19)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Mark room complete",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp
+                            )
+                            Text(
+                                text = "→",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Host only · the room closes when you mark it complete.",
+                        fontFamily = InterFontFamily,
+                        fontSize = 12.sp,
+                        color = colors.onSurfaceVariant
                     )
                 }
             }

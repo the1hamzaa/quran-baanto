@@ -298,6 +298,53 @@ object KhatmNotificationHelper {
         }
     }
 
+    /**
+     * Dispatches a reminder notification for nudging a member from Admin Powers.
+     * Returns true if notification was posted (permission granted), false otherwise.
+     */
+    fun sendAdminMemberNudgeNotification(
+        context: Context,
+        roomId: Long,
+        roomName: String,
+        memberName: String,
+        portionLabel: String
+    ): Boolean {
+        ensureChannelCreated(context)
+        if (!hasNotificationPermission(context)) return false
+
+        val cleanMember = memberName.trim().ifBlank { "Member" }
+        val notificationId = ((roomId.toInt() and 0x0FFFFFFF) + 9000) + (cleanMember.hashCode() and 0xFF)
+        val title = "$roomName • Nudge for $cleanMember"
+        val message = "Assalamu Alaikum $cleanMember, gentle reminder to complete $portionLabel in \"$roomName\"."
+
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID_ONLINE_REMAINING)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(contentPendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        return try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
+            true
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
     fun handleScheduledAlarmBroadcast(context: Context, intent: Intent) {
         ensureChannelCreated(context)
         if (!hasNotificationPermission(context)) return

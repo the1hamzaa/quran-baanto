@@ -29,6 +29,12 @@ interface DistributionDao {
     @Query("UPDATE participants SET hasPendingSync = :pending WHERE id = :participantId")
     suspend fun updateParticipantSyncState(participantId: Long, pending: Boolean)
 
+    @Query("UPDATE participants SET isAdmin = :isAdmin, hasPendingSync = 1 WHERE id = :id")
+    suspend fun updateParticipantAdminRole(id: Long, isAdmin: Boolean)
+
+    @Query("UPDATE participants SET isAdmin = :isAdmin, hasPendingSync = 1 WHERE distributionId = :distributionId AND LOWER(TRIM(name)) = LOWER(TRIM(:memberName)) AND isGuestEntry = :isGuest")
+    suspend fun updateMemberAdminRole(distributionId: Long, memberName: String, isGuest: Boolean, isAdmin: Boolean)
+
     @Query("SELECT * FROM distributions WHERE id = :id")
     fun getDistributionByIdFlow(id: Long): Flow<DistributionEntity?>
 

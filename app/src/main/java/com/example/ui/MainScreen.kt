@@ -1,21 +1,21 @@
 package com.example.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,12 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -38,20 +33,32 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.data.db.DistributionType
+import com.example.data.db.RoomMode
+import com.example.data.quran.QuranPageMapper
+import com.example.data.quran.ReadMode
+import com.example.ui.components.BottomNav
 import com.example.ui.distribution.CreateEditDistributionScreen
 import com.example.ui.distribution.DistributionDetailScreen
 import com.example.ui.distribution.DistributionListScreen
 import com.example.ui.home.HomeScreen
 import com.example.ui.navigation.BottomNavItem
-import com.example.ui.navigation.FloatingSanctuaryNavDock
 import com.example.ui.quran.QuranListScreen
 import com.example.ui.quran.QuranReaderScreen
 import com.example.ui.settings.SettingsSheet
-import com.example.ui.theme.QuranBaantoTheme
 import com.example.ui.streak.JourneyScreen
+import com.example.ui.theme.QuranBaantoDesignSystem
+import com.example.ui.theme.QuranBaantoTheme
 import com.example.ui.viewmodel.DistributionViewModel
 import com.example.ui.viewmodel.QuranViewModel
 import com.example.ui.viewmodel.StreakViewModel
+
+private val TopLevelTabRoutes = setOf(
+    BottomNavItem.Home.route,
+    BottomNavItem.Quran.route,
+    BottomNavItem.Distributions.route,
+    BottomNavItem.Streaks.route
+)
 
 @Composable
 fun MainScreen() {
@@ -61,43 +68,64 @@ fun MainScreen() {
     val isDarkTheme by quranViewModel.isDarkTheme.collectAsState()
     var showSettingsSheet by remember { mutableStateOf(false) }
 
+    var isDistributionFullscreen by remember { mutableStateOf(false) }
+    var isProgressFullscreen by remember { mutableStateOf(false) }
+    var isProgressOnCharcoal by remember { mutableStateOf(true) }
+
     QuranBaantoTheme(darkTheme = isDarkTheme) {
+        val colors = QuranBaantoDesignSystem.colors
         val navController = rememberNavController()
 
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
 
-        val bottomNavItems = listOf(
-            BottomNavItem.Home,
-            BottomNavItem.Quran,
-            BottomNavItem.Distributions,
-            BottomNavItem.Streaks
+        val isTopLevelRoute = currentRoute in TopLevelTabRoutes
+        val shouldShowBottomBar = isTopLevelRoute &&
+            !(currentRoute == BottomNavItem.Distributions.route && isDistributionFullscreen) &&
+            !(currentRoute == BottomNavItem.Streaks.route && isProgressFullscreen)
+
+        val onCharcoalBottomBar = when (currentRoute) {
+            BottomNavItem.Home.route -> true
+            BottomNavItem.Streaks.route -> isProgressOnCharcoal
+            else -> false
+        }
+        val streakCharcoalBg = if (colors.isDark) colors.background else Color(0xFF181611)
+        val bottomBarContainerColor by animateColorAsState(
+            targetValue = when (currentRoute) {
+                BottomNavItem.Home.route -> colors.deepestSection
+                BottomNavItem.Streaks.route -> if (isProgressOnCharcoal) streakCharcoalBg else colors.background
+                else -> colors.background
+            },
+            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+            label = "persistent_bottom_bar_bg"
         )
 
-        // Show bottom navigation bar only on main tab routes
-        val shouldShowBottomBar = currentRoute in listOf("home", "quran", "distributions", "streaks")
+        val navigateTopLevelTab: (String) -> Unit = { route ->
+            if (currentRoute != route) {
+                navController.navigate(route) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        }
 
         Scaffold(
             bottomBar = {
                 AnimatedVisibility(
                     visible = shouldShowBottomBar,
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it }
+                    enter = fadeIn(animationSpec = tween(180)),
+                    exit = fadeOut(animationSpec = tween(130))
                 ) {
-                    FloatingSanctuaryNavDock(
-                        currentRoute = currentRoute ?: BottomNavItem.Home.route,
-                        onNavigate = { route ->
-                            if (currentRoute != route) {
-                                navController.navigate(route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        }
-                    )
+                    Surface(color = bottomBarContainerColor) {
+                        BottomNav(
+                            currentRoute = currentRoute ?: BottomNavItem.Home.route,
+                            onCharcoal = onCharcoalBottomBar,
+                            onNavigate = navigateTopLevelTab
+                        )
+                    }
                 }
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -107,6 +135,62 @@ fun MainScreen() {
             NavHost(
                 navController = navController,
                 startDestination = BottomNavItem.Home.route,
+                enterTransition = {
+                    val targetIsTab = targetState.destination.route in TopLevelTabRoutes
+                    val initialIsTab = initialState.destination.route in TopLevelTabRoutes
+                    if (targetIsTab && initialIsTab) {
+                        fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                            scaleIn(
+                                initialScale = 0.985f,
+                                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                            )
+                    } else {
+                        slideInHorizontally(
+                            initialOffsetX = { it / 6 },
+                            animationSpec = tween(260, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(220))
+                    }
+                },
+                exitTransition = {
+                    val targetIsTab = targetState.destination.route in TopLevelTabRoutes
+                    val initialIsTab = initialState.destination.route in TopLevelTabRoutes
+                    if (targetIsTab && initialIsTab) {
+                        fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+                    } else {
+                        slideOutHorizontally(
+                            targetOffsetX = { -it / 8 },
+                            animationSpec = tween(220, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(160))
+                    }
+                },
+                popEnterTransition = {
+                    val targetIsTab = targetState.destination.route in TopLevelTabRoutes
+                    val initialIsTab = initialState.destination.route in TopLevelTabRoutes
+                    if (targetIsTab && initialIsTab) {
+                        fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                            scaleIn(
+                                initialScale = 0.985f,
+                                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                            )
+                    } else {
+                        slideInHorizontally(
+                            initialOffsetX = { -it / 8 },
+                            animationSpec = tween(240, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(200))
+                    }
+                },
+                popExitTransition = {
+                    val targetIsTab = targetState.destination.route in TopLevelTabRoutes
+                    val initialIsTab = initialState.destination.route in TopLevelTabRoutes
+                    if (targetIsTab && initialIsTab) {
+                        fadeOut(animationSpec = tween(140, easing = FastOutLinearInEasing))
+                    } else {
+                        slideOutHorizontally(
+                            targetOffsetX = { it / 6 },
+                            animationSpec = tween(240, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(180))
+                    }
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(bottom = innerPadding.calculateBottomPadding())
@@ -117,27 +201,7 @@ fun MainScreen() {
                         distributionViewModel = distributionViewModel,
                         quranViewModel = quranViewModel,
                         streakViewModel = streakViewModel,
-                        onNavigateToQuran = {
-                            navController.navigate(BottomNavItem.Quran.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        onNavigateToDistributions = {
-                            navController.navigate(BottomNavItem.Distributions.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        onNavigateToStreaks = {
-                            navController.navigate(BottomNavItem.Streaks.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onNavigateToStreaks = { navigateTopLevelTab(BottomNavItem.Streaks.route) },
                         onCreateNewDistribution = { type ->
                             navController.navigate("create_edit_distribution?type=${type.name}")
                         },
@@ -214,25 +278,6 @@ fun MainScreen() {
                     )
                 }
 
-                composable(
-                    route = "quran_reader/{paraNum}",
-                    arguments = listOf(navArgument("paraNum") { type = NavType.IntType })
-                ) { backStackEntry ->
-                    val paraNum = backStackEntry.arguments?.getInt("paraNum") ?: 1
-                    LaunchedEffect(paraNum) {
-                        if (quranViewModel.selectedParaNumber.value != paraNum) {
-                            quranViewModel.selectPara(paraNum)
-                        }
-                    }
-                    QuranReaderScreen(
-                        quranViewModel = quranViewModel,
-                        onBack = { navController.popBackStack() },
-                        onAyahRead = { sNum, aNum, pNum, sName ->
-                            streakViewModel.recordAyahRecitation(1, sNum, aNum, pNum, sName)
-                        }
-                    )
-                }
-
                 // Distributions List Screen
                 composable(BottomNavItem.Distributions.route) {
                     DistributionListScreen(
@@ -242,14 +287,31 @@ fun MainScreen() {
                         },
                         onOpenDistributionDetail = { distId ->
                             navController.navigate("distribution_detail/$distId")
+                        },
+                        onFullscreenOverlayChanged = { isOpen ->
+                            isDistributionFullscreen = isOpen
                         }
                     )
                 }
 
                 // Streaks & Plans Journey Screen
                 composable(BottomNavItem.Streaks.route) {
+                    val lastBookmark by quranViewModel.lastReadBookmark.collectAsState()
+                    val bookmarkPage = remember(lastBookmark) {
+                        val bm = lastBookmark
+                        if (bm != null && bm.surahNumber > 0) {
+                            QuranPageMapper.getPageForAyah(
+                                surahNumber = bm.surahNumber,
+                                ayahNumber = bm.ayahNumber.coerceAtLeast(1),
+                                paraNumberHint = if (bm.mode == ReadMode.PARA) bm.id else 1
+                            )
+                        } else {
+                            1
+                        }
+                    }
                     JourneyScreen(
                         streakViewModel = streakViewModel,
+                        currentBookmarkPage = bookmarkPage,
                         onContinueReading = { paraNum, surahNum, ayahNum ->
                             quranViewModel.selectPara(
                                 paraNumber = paraNum,
@@ -257,10 +319,22 @@ fun MainScreen() {
                                 targetSurah = surahNum
                             )
                             navController.navigate("quran_reader_para/$paraNum")
+                        },
+                        onOpenSurahReader = { surahNum ->
+                            quranViewModel.selectSurah(surahNum)
+                            navController.navigate("quran_reader_surah/$surahNum")
+                        },
+                        onDismissOnboarding = {
+                            navigateTopLevelTab(BottomNavItem.Home.route)
+                        },
+                        onFullscreenOverlayChanged = { isOpen ->
+                            isProgressFullscreen = isOpen
+                        },
+                        onCharcoalStateChanged = { isCharcoal ->
+                            isProgressOnCharcoal = isCharcoal
                         }
                     )
                 }
-
 
                 // Distribution Detail Screen
                 composable(
@@ -305,14 +379,14 @@ fun MainScreen() {
                     val typeString = backStackEntry.arguments?.getString("type") ?: "KHATM"
                     val modeString = backStackEntry.arguments?.getString("mode") ?: "LOCAL"
                     val initialType = try {
-                        com.example.data.db.DistributionType.valueOf(typeString)
+                        DistributionType.valueOf(typeString)
                     } catch (e: Exception) {
-                        com.example.data.db.DistributionType.KHATM
+                        DistributionType.KHATM
                     }
                     val initialMode = try {
-                        com.example.data.db.RoomMode.valueOf(modeString)
+                        RoomMode.valueOf(modeString)
                     } catch (e: Exception) {
-                        com.example.data.db.RoomMode.LOCAL
+                        RoomMode.LOCAL
                     }
 
                     CreateEditDistributionScreen(

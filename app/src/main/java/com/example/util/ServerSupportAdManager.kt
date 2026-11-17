@@ -76,6 +76,7 @@ object ServerSupportAdManager {
      * Preload Rewarded Ad specifically for Online Distribution Rooms & Streak Circles.
      */
     fun preloadRoomAd(context: Context) {
+        if (isEmulator()) return
         val appContext = context.applicationContext
         if (loadedRoomRewardedAd != null || isLoadingRoomAd) return
 
@@ -108,6 +109,7 @@ object ServerSupportAdManager {
      * Preload Rewarded Ad specifically for Streak Freeze Shield Drops.
      */
     fun preloadFreezeAd(context: Context) {
+        if (isEmulator()) return
         val appContext = context.applicationContext
         if (loadedFreezeRewardedAd != null || isLoadingFreezeAd) return
 
@@ -270,6 +272,34 @@ object ServerSupportAdManager {
      */
     fun dismissGratitude() {
         _showGratitudeDialog.value = false
+    }
+
+    fun isEmulator(): Boolean {
+        val fingerprint = android.os.Build.FINGERPRINT
+        val model = android.os.Build.MODEL
+        val manufacturer = android.os.Build.MANUFACTURER
+        val brand = android.os.Build.BRAND
+        val device = android.os.Build.DEVICE
+        val product = android.os.Build.PRODUCT
+        val hardware = android.os.Build.HARDWARE
+
+        return fingerprint.startsWith("generic")
+            || fingerprint.startsWith("unknown")
+            || model.contains("google_sdk")
+            || model.contains("Emulator")
+            || model.contains("Android SDK built for")
+            || manufacturer.contains("Genymotion")
+            || (brand.startsWith("generic") && device.startsWith("generic"))
+            || "google_sdk" == product
+            || hardware.contains("goldfish")
+            || hardware.contains("ranchu")
+            || product.contains("sdk_google")
+            || product.contains("google_sdk")
+            || product.contains("sdk")
+            || product.contains("sdk_x86")
+            || product.contains("vbox86p")
+            || product.contains("emulator")
+            || product.contains("simulator")
     }
 
     private fun findActivity(context: Context): Activity? {

@@ -292,4 +292,24 @@ class QuranViewModel(application: Application) : AndroidViewModel(application) {
             preferencesDataStore.addOrUpdateBookmark(bookmark)
         }
     }
+
+    fun updateLastRead(
+        surahNumber: Int,
+        ayahNumber: Int,
+        paraNumber: Int,
+        surahName: String,
+        arabicName: String
+    ) {
+        val bookmark = LastReadBookmark(
+            mode = if (activeReadMode.value == ReadMode.PARA) ReadMode.PARA else ReadMode.SURAH,
+            id = if (activeReadMode.value == ReadMode.PARA) paraNumber else surahNumber,
+            title = surahName,
+            arabicTitle = arabicName,
+            subtitle = "Ayah $ayahNumber",
+            surahNumber = surahNumber,
+            ayahNumber = ayahNumber,
+            timestamp = System.currentTimeMillis()
+        )
+        saveBookmark(bookmark)
+    }
 }

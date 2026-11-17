@@ -7,7 +7,7 @@ data class ParticipantAllocation(
     val id: Long = 0,
     val name: String,
     val count: Int,
-    val displayOrder: Int,
+    val displayOrder: Int = 0,
     val uid: String = java.util.UUID.randomUUID().toString(),
     val specificParas: List<Int> = emptyList()
 )
@@ -235,14 +235,140 @@ object RotationEngine {
     ): List<ParaAssignment> {
         if (participants.isEmpty()) return emptyList()
 
-        val sortedParticipants = participants.sortedBy { it.displayOrder }
+        val sortedParticipants = participants.sortedWith(
+            compareBy<ParticipantAllocation> { it.specificParas.firstOrNull() ?: Int.MAX_VALUE }
+                .thenBy { it.displayOrder }
+                .thenBy { it.id }
+        )
         val n = sortedParticipants.size
         val monthOffset = (targetYear - startYear) * 12 + (targetMonth - startMonth)
+        val totalAllocated = sortedParticipants.sumOf { it.count.coerceAtLeast(0) }
+        val hasCustomStart = sortedParticipants.any { it.specificParas.isNotEmpty() }
 
-        val shiftStep = customShiftStep ?: calculateOptimalRotationStep(sortedParticipants)
+        // Partial room (< 30 Paras claimed) OR partial/custom Online Monthly room:
+        // Month 0 honors every participant's chosen Paras directly; subsequent months advance
+        // cleanly by the participant's allocated block count around the 30-Para circle.
+        if (totalAllocated < TOTAL_QURAN_PARAS) {
+            val occupiedMonth0 = mutableSetOf<Int>()
+            val initialStarts = mutableMapOf<Long, Int>()
+            // First place participants with explicit starting Paras
+            for (p in sortedParticipants) {
+                val explicitStart = p.specificParas.firstOrNull()?.takeIf { it in 1..TOTAL_QURAN_PARAS }
+                if (explicitStart != null) {
+                    initialStarts[p.id] = explicitStart
+                    for (offset in 0 until p.count) {
+                        occupiedMonth0.add(posMod(explicitStart - 1 + offset, TOTAL_QURAN_PARAS) + 1)
+                    }
+                }
+            }
+            // Then place any participants without explicit Paras into the first free slot(s)
+            var nextFree = 1
+            for (p in sortedParticipants) {
+                if (p.id in initialStarts) continue
+                while (nextFree <= TOTAL_QURAN_PARAS && nextFree in occupiedMonth0) {
+                    nextFree++
+                }
+                val start = ((nextFree - 1) % TOTAL_QURAN_PARAS) + 1
+                initialStarts[p.id] = start
+                for (offset in 0 until p.count) {
+                    val slot = posMod(start - 1 + offset, TOTAL_QURAN_PARAS) + 1
+                    occupiedMonth0.add(slot)
+                }
+                nextFree = posMod(start - 1 + p.count, TOTAL_QURAN_PARAS) + 1
+            }
+
+            if (monthOffset == 0) {
+                return sortedParticipants.mapNotNull { p ->
+                    val count = p.count
+                    if (count <= 0) return@mapNotNull null
+                    val actualStart = initialStarts[p.id] ?: 1
+                    val actualEnd = posMod(actualStart - 1 + count - 1, TOTAL_QURAN_PARAS) + 1
+                    ParaAssignment(
+                        participantId = p.id,
+                        participantName = p.name,
+                        allocatedCount = count,
+                        startPara = actualStart,
+                        endPara = actualEnd
+                    )
+                }.sortedWith(paraFirstComparator)
+            }
+
+            // For non-zero months in a partial room: compute direct shift by each member's count.
+            // If no overlap occurs between active members, use those exact positions (e.g., 4-5 -> 6-7, 1-2 -> 3-4).
+            // If two adjacent partial members have unequal counts that would collide, shift the second past the collision.
+            val directAssignments = mutableListOf<ParaAssignment>()
+            val occupiedTarget = mutableSetOf<Int>()
+            var hasCollision = false
+
+            for (p in sortedParticipants) {
+                val count = p.count
+                if (count <= 0) continue
+                val baseStart = initialStarts[p.id] ?: 1
+                val actualStart = posMod((baseStart - 1) + monthOffset * count, TOTAL_QURAN_PARAS) + 1
+                val actualEnd = posMod(actualStart - 1 + count - 1, TOTAL_QURAN_PARAS) + 1
+                val paras = (0 until count).map { posMod(actualStart - 1 + it, TOTAL_QURAN_PARAS) + 1 }
+                if (paras.any { it in occupiedTarget }) {
+                    hasCollision = true
+                    break
+                }
+                occupiedTarget.addAll(paras)
+                directAssignments.add(
+                    ParaAssignment(
+                        participantId = p.id,
+                        participantName = p.name,
+                        allocatedCount = count,
+                        startPara = actualStart,
+                        endPara = actualEnd
+                    )
+                )
+            }
+
+            if (!hasCollision) {
+                return directAssignments.sortedWith(paraFirstComparator)
+            }
+
+            // Fallback collision-free advancement for unequal adjacent partial blocks
+            val safeAssignments = mutableListOf<ParaAssignment>()
+            val safeOccupied = mutableSetOf<Int>()
+            for (p in sortedParticipants) {
+                val count = p.count
+                if (count <= 0) continue
+                val baseStart = initialStarts[p.id] ?: 1
+                var candidateStart = posMod((baseStart - 1) + monthOffset * count, TOTAL_QURAN_PARAS) + 1
+                var attempts = 0
+                while (attempts < TOTAL_QURAN_PARAS) {
+                    val block = (0 until count).map { posMod(candidateStart - 1 + it, TOTAL_QURAN_PARAS) + 1 }
+                    if (block.none { it in safeOccupied }) {
+                        safeOccupied.addAll(block)
+                        val actualEnd = posMod(candidateStart - 1 + count - 1, TOTAL_QURAN_PARAS) + 1
+                        safeAssignments.add(
+                            ParaAssignment(
+                                participantId = p.id,
+                                participantName = p.name,
+                                allocatedCount = count,
+                                startPara = candidateStart,
+                                endPara = actualEnd
+                            )
+                        )
+                        break
+                    }
+                    candidateStart = posMod(candidateStart, TOTAL_QURAN_PARAS) + 1
+                    attempts++
+                }
+            }
+            return safeAssignments.sortedWith(paraFirstComparator)
+        }
+
+        // Full 30-Para room: use explicit Month 0 order if specificParas were chosen, else queue rotation
+        val baseQueue = if (hasCustomStart) {
+            sortedParticipants
+        } else {
+            participants.sortedBy { it.displayOrder }
+        }
+        val shiftStep = customShiftStep ?: calculateOptimalRotationStep(baseQueue)
         val startIndex = posMod(-monthOffset * shiftStep, n)
         val rotatedParticipants = (0 until n).map { i ->
-            sortedParticipants[(startIndex + i) % n]
+            baseQueue[(startIndex + i) % n]
         }
 
         val assignments = mutableListOf<ParaAssignment>()
@@ -253,7 +379,6 @@ object RotationEngine {
             if (count <= 0) continue
 
             val actualStart = currentPara
-            // End para wrapping circularly around 1..30 without stopping at 30
             val actualEnd = posMod(actualStart - 1 + count - 1, TOTAL_QURAN_PARAS) + 1
 
             assignments.add(

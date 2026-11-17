@@ -627,6 +627,7 @@ class ExampleUnitTest {
             override fun getActivePlans(): kotlinx.coroutines.flow.Flow<List<com.example.data.db.ReadingPlanEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override fun getAllPlans(): kotlinx.coroutines.flow.Flow<List<com.example.data.db.ReadingPlanEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override fun getPlanById(id: Long): kotlinx.coroutines.flow.Flow<com.example.data.db.ReadingPlanEntity?> = kotlinx.coroutines.flow.flowOf(null)
+            override suspend fun getPlanByIdDirect(id: Long): com.example.data.db.ReadingPlanEntity? = null
             override suspend fun insertPlan(plan: com.example.data.db.ReadingPlanEntity): Long = 1L
             override suspend fun updatePlan(plan: com.example.data.db.ReadingPlanEntity) {}
             override suspend fun deletePlanById(id: Long) {}
@@ -637,8 +638,10 @@ class ExampleUnitTest {
             override suspend fun insertCircle(circle: com.example.data.db.StreakCircleEntity): Long = 1L
             override suspend fun updateCircle(circle: com.example.data.db.StreakCircleEntity) {}
             override suspend fun deleteCircleById(id: Long) {}
+            override fun getAllCircleMembers(): kotlinx.coroutines.flow.Flow<List<com.example.data.db.StreakCircleMemberEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override fun getMembersForCircle(circleId: Long): kotlinx.coroutines.flow.Flow<List<com.example.data.db.StreakCircleMemberEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override suspend fun getMembersForCircleDirect(circleId: Long): List<com.example.data.db.StreakCircleMemberEntity> = emptyList()
+            override suspend fun getMemberByIdDirect(id: Long): com.example.data.db.StreakCircleMemberEntity? = null
             override suspend fun insertMember(member: com.example.data.db.StreakCircleMemberEntity): Long = 1L
             override suspend fun updateMember(member: com.example.data.db.StreakCircleMemberEntity) {}
             override suspend fun deleteMemberById(id: Long) {}
@@ -672,6 +675,7 @@ class ExampleUnitTest {
             override fun getActivePlans(): kotlinx.coroutines.flow.Flow<List<com.example.data.db.ReadingPlanEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override fun getAllPlans(): kotlinx.coroutines.flow.Flow<List<com.example.data.db.ReadingPlanEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override fun getPlanById(id: Long): kotlinx.coroutines.flow.Flow<com.example.data.db.ReadingPlanEntity?> = kotlinx.coroutines.flow.flowOf(null)
+            override suspend fun getPlanByIdDirect(id: Long): com.example.data.db.ReadingPlanEntity? = null
             override suspend fun insertPlan(plan: com.example.data.db.ReadingPlanEntity): Long = 1L
             override suspend fun updatePlan(plan: com.example.data.db.ReadingPlanEntity) {}
             override suspend fun deletePlanById(id: Long) {}
@@ -682,8 +686,10 @@ class ExampleUnitTest {
             override suspend fun insertCircle(circle: com.example.data.db.StreakCircleEntity): Long = 1L
             override suspend fun updateCircle(circle: com.example.data.db.StreakCircleEntity) {}
             override suspend fun deleteCircleById(id: Long) {}
+            override fun getAllCircleMembers(): kotlinx.coroutines.flow.Flow<List<com.example.data.db.StreakCircleMemberEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override fun getMembersForCircle(circleId: Long): kotlinx.coroutines.flow.Flow<List<com.example.data.db.StreakCircleMemberEntity>> = kotlinx.coroutines.flow.flowOf(emptyList())
             override suspend fun getMembersForCircleDirect(circleId: Long): List<com.example.data.db.StreakCircleMemberEntity> = emptyList()
+            override suspend fun getMemberByIdDirect(id: Long): com.example.data.db.StreakCircleMemberEntity? = null
             override suspend fun insertMember(member: com.example.data.db.StreakCircleMemberEntity): Long = 1L
             override suspend fun updateMember(member: com.example.data.db.StreakCircleMemberEntity) {}
             override suspend fun deleteMemberById(id: Long) {}
@@ -702,25 +708,27 @@ class ExampleUnitTest {
                 circleId = 5L,
                 memberName = "Zaid",
                 currentStreakDays = 14,
+                pagesReadToday = 4,
                 hasCompletedToday = true,
-                isHost = true
+                isHost = true,
+                isCurrentUser = true
             ),
             com.example.data.db.StreakCircleMemberEntity(
                 id = 2L,
                 circleId = 5L,
                 memberName = "Bilal",
                 currentStreakDays = 12,
+                pagesReadToday = 0,
                 hasCompletedToday = false,
                 isHost = false
             )
         )
 
         val text = repo.formatStreakCircleShareText(circle, members)
-        assertTrue(text.contains("Fajr Noor Circle"))
-        assertTrue(text.contains("14-Day Collective Streak"))
-        assertTrue(text.contains("Room Passcode: STRK-7788"))
-        assertTrue(text.contains("Zaid (Host): 14 Days (✓ Recited today)"))
-        assertTrue(text.contains("Bilal: 12 Days (⏳ Pending today)"))
+        assertTrue(text.contains("Fajr Noor Circle · Reading Circle"))
+        assertTrue(text.contains("Invite Code: STRK-7788"))
+        assertTrue(text.contains("Zaid (You): 4 pages today · Done"))
+        assertTrue(text.contains("Bilal: Not yet today"))
     }
 }
 

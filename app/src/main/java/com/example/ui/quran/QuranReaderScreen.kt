@@ -297,13 +297,43 @@ fun QuranReaderScreen(
         quranViewModel.clearTargetScrollAyah()
     }
 
-    // Automatic Ayah scroll counter with reader progress tracking
+    // Automatic Ayah & Page scroll tracker with reader progress tracking & live bookmark sync
+    var initialScrollSettled by remember(isParaMode, selectedParaNumber, selectedSurahNumber) { mutableStateOf(false) }
     LaunchedEffect(listState.firstVisibleItemIndex, flattenedItems) {
         val idx = listState.firstVisibleItemIndex
         val item = flattenedItems.getOrNull(idx)
         if (item is FlattenedReaderItem.VerseItem) {
             val pNum = if (isParaMode) (selectedParaNumber ?: 1) else (surahDetail?.info?.startingPara ?: 1)
+            val pageNum = com.example.data.quran.QuranPageMapper.getPageForAyah(
+                surahNumber = item.surahNumber,
+                ayahNumber = item.ayahNumber,
+                paraNumberHint = pNum
+            )
+            quranViewModel.updateLastRead(
+                surahNumber = item.surahNumber,
+                ayahNumber = item.ayahNumber,
+                paraNumber = pNum,
+                surahName = item.surahNameEnglish,
+                arabicName = item.surahNameArabic
+            )
+            // Short dwell filter on initial open so glancing doesn't falsely log a page,
+            // while actively reading or scrolling records the exact Mushaf page immediately.
+            if (!initialScrollSettled) {
+                kotlinx.coroutines.delay(900)
+                initialScrollSettled = true
+            } else {
+                kotlinx.coroutines.delay(350)
+            }
             onAyahRead?.invoke(item.surahNumber, item.ayahNumber, pNum, item.surahNameEnglish)
+        } else if (item is FlattenedReaderItem.HeaderItem && !initialScrollSettled) {
+            // If user stays on a short surah header + verses view for >= 1.2s, record its starting verse & page
+            kotlinx.coroutines.delay(1200)
+            initialScrollSettled = true
+            val firstVerse = flattenedItems.firstOrNull { it is FlattenedReaderItem.VerseItem } as? FlattenedReaderItem.VerseItem
+            if (firstVerse != null) {
+                val pNum = if (isParaMode) (selectedParaNumber ?: 1) else (surahDetail?.info?.startingPara ?: 1)
+                onAyahRead?.invoke(firstVerse.surahNumber, firstVerse.ayahNumber, pNum, firstVerse.surahNameEnglish)
+            }
         }
     }
 

@@ -6,6 +6,9 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class PlanType {
+    FINISH_QURAN,
+    MEMORIZE,
+    WEEKLY,
     DAILY_AYAH_GOAL,
     PARA_RANGE_TARGET,
     CUSTOM_SURAH_TARGET
@@ -15,6 +18,7 @@ enum class PlanType {
 data class StreakEntity(
     @PrimaryKey val id: Long = 1L,
     val isOptedIn: Boolean = false,
+    val hasDismissedStreakOnboarding: Boolean = false,
     val currentStreakDays: Int = 0,
     val longestStreakDays: Int = 0,
     val lastCompletedDate: String = "", // YYYY-MM-DD
@@ -33,12 +37,18 @@ data class StreakEntity(
 data class ReadingPlanEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
-    val planType: PlanType = PlanType.DAILY_AYAH_GOAL,
+    val planType: PlanType = PlanType.FINISH_QURAN,
     val dailyTargetAyahs: Int = 10,
+    val dailyTargetPages: Int = 20,
+    val startPage: Int = 1,
+    val totalPagesReadInPlan: Int = 0,
     val targetParasCsv: String = "",
     val targetSurahNumber: Int? = null,
+    val weeklyDayOfWeek: Int = 5, // 1=Mon .. 7=Sun (5=Friday)
+    val dailyReminderEnabled: Boolean = true,
     val targetCompletionDate: String = "",
     val startDate: String = "",
+    val lastProgressDate: String = "",
     val isActive: Boolean = true,
     val isCompleted: Boolean = false,
     val completedDaysCount: Int = 0,
@@ -51,6 +61,10 @@ data class DailyLogEntity(
     @PrimaryKey val dateKey: String, // YYYY-MM-DD
     val ayahsReadCount: Int = 0,
     val targetAyahsCount: Int = 10,
+    val pagesReadCount: Int = 0,
+    val targetPagesCount: Int = 10,
+    val readPagesCsv: String = "",
+    val readAyahKeysCsv: String = "",
     val hasMetGoal: Boolean = false,
     val freezeShieldUsed: Boolean = false,
     val completedTimestamp: Long? = null
@@ -61,6 +75,8 @@ data class StreakCircleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val roomPasscode: String,
+    val colorIndex: Int = 0, // 0=Pine, 1=Charcoal, 2=Gold, 3=SoftNeutral
+    val hostName: String = "",
     val isOnline: Boolean = true,
     val collectiveStreakDays: Int = 0,
     val lastEvaluatedDate: String = "",
@@ -84,7 +100,10 @@ data class StreakCircleMemberEntity(
     val circleId: Long,
     val memberName: String,
     val currentStreakDays: Int = 0,
+    val pagesReadToday: Int = 0,
     val hasCompletedToday: Boolean = false,
     val lastCompletedDate: String = "",
-    val isHost: Boolean = false
+    val lastNudgedTimestamp: Long = 0L,
+    val isHost: Boolean = false,
+    val isCurrentUser: Boolean = false
 )

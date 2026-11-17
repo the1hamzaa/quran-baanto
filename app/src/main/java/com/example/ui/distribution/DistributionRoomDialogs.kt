@@ -28,7 +28,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -43,7 +42,6 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,8 +73,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.ui.components.PrimarySanctuaryButton
 import com.example.ui.components.SecondaryEditorialButton
-import com.example.ui.theme.LocalBlueAccent
-import com.example.ui.theme.OnlineGoldAccent
+import com.example.ui.theme.QuranBaantoDesignSystem
 import com.example.util.KhatmNotificationHelper
 import com.example.util.RoomQrCodeHelper
 
@@ -720,203 +717,6 @@ fun ReopenAmalRoomDialog(
     }
 }
 
-/**
- * Shown when an Online Amal Room is reopened with a brand-new unique shareable passcode.
- */
-@Composable
-fun ReopenedRoomPasscodeDialog(
-    roomName: String,
-    roundNumber: Int,
-    newPasscode: String,
-    onShareClick: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)),
-            tonalElevation = 8.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-
-                Text(
-                    text = "Room Reopened • Round $roundNumber",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = "A new unique Room Passcode has been generated for \"$roomName\". Share it with the same or new members to begin Round $roundNumber!",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "NEW ROOM PASSCODE",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.8.sp
-                                ),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = newPasscode,
-                                style = MaterialTheme.typography.headlineSmall.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Room Passcode", newPasscode))
-                                Toast.makeText(context, "Passcode copied", Toast.LENGTH_SHORT).show()
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copy passcode",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SecondaryEditorialButton(
-                        text = "Done",
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    )
-                    PrimarySanctuaryButton(
-                        text = "Share Room",
-                        icon = Icons.Default.Share,
-                        onClick = {
-                            onDismiss()
-                            onShareClick()
-                        },
-                        modifier = Modifier.weight(1.2f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Happy celebration dialog shown when a One-Time Khatm (or Amal / Monthly Khatm) reaches 100% completion.
- */
-@Composable
-fun KhatmCelebrationDialog(
-    message: String,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.4.dp, MaterialTheme.colorScheme.secondary),
-            tonalElevation = 10.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(26.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-
-                Text(
-                    text = "Alhamdulillah! Khatm Complete",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 21.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 21.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                HorizontalDivider(
-                    thickness = 0.8.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-
-                PrimarySanctuaryButton(
-                    text = "Alhamdulillah",
-                    icon = Icons.Default.Check,
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun ClaimIdentityTab(
     title: String,
@@ -1200,193 +1000,6 @@ fun RoomQrCodeDialog(
     }
 }
 
-/**
- * Beautifully designed, Sanctuary-styled opt-in pop-up asking the user if they'd like to turn on
- * notifications for reminders ONLY when creating/joining a distribution or scheduling a reminder.
- */
-@Composable
-fun NotificationPermissionOptInDialog(
-    isOnlineRoomContext: Boolean = true,
-    onEnableReminders: () -> Unit,
-    onNotNow: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onNotNow,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(
-                1.4.dp,
-                if (isOnlineRoomContext) OnlineGoldAccent.copy(alpha = 0.65f)
-                else LocalBlueAccent.copy(alpha = 0.65f)
-            ),
-            tonalElevation = 8.dp,
-            shadowElevation = 20.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp)
-                .widthIn(max = 460.dp)
-                .testTag("notification_opt_in_dialog")
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(26.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(MaterialTheme.colorScheme.secondaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "Turn On Reading Reminders?",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 21.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        text = "We only send thoughtful, zero-clutter reminders tailored to your rooms:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                // Online Room Customized Reminder Explanation Card
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, OnlineGoldAccent.copy(alpha = 0.45f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(OnlineGoldAccent.copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = OnlineGoldAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Online Rooms • Your Remaining Share Only",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Gentle reminders only for your own remaining Paras or Amal recitations.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                // Local Room Customized Monthly Explanation Card
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, LocalBlueAccent.copy(alpha = 0.45f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(LocalBlueAccent.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = LocalBlueAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Local Rooms • New Month Ready Alert",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Monthly notification whenever a new month is assigned so your distribution is ready to read and share.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SecondaryEditorialButton(
-                        text = "Not Now",
-                        onClick = onNotNow,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("notification_opt_in_not_now")
-                    )
-                    PrimarySanctuaryButton(
-                        text = "Turn On Reminders",
-                        icon = Icons.Default.NotificationsActive,
-                        onClick = onEnableReminders,
-                        modifier = Modifier
-                            .weight(1.35f)
-                            .testTag("notification_opt_in_enable")
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Customized Reminder Dialog for ONLINE rooms:
- * Only reminds the user about their own remaining Para(s) or remaining Amal count.
- */
 @Composable
 fun OnlineRemainingReminderDialog(
     roomName: String,
@@ -1397,6 +1010,7 @@ fun OnlineRemainingReminderDialog(
     onCancelScheduled: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val goldAccent = QuranBaantoDesignSystem.colors.gold
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1404,7 +1018,7 @@ fun OnlineRemainingReminderDialog(
         Surface(
             shape = RoundedCornerShape(26.dp),
             color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.3.dp, OnlineGoldAccent.copy(alpha = 0.6f)),
+            border = BorderStroke(1.3.dp, goldAccent.copy(alpha = 0.6f)),
             tonalElevation = 8.dp,
             shadowElevation = 16.dp,
             modifier = Modifier
@@ -1433,13 +1047,13 @@ fun OnlineRemainingReminderDialog(
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(OnlineGoldAccent.copy(alpha = 0.18f)),
+                                .background(goldAccent.copy(alpha = 0.18f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.NotificationsActive,
                                 contentDescription = null,
-                                tint = OnlineGoldAccent,
+                                tint = goldAccent,
                                 modifier = Modifier.size(21.dp)
                             )
                         }
@@ -1482,7 +1096,7 @@ fun OnlineRemainingReminderDialog(
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, OnlineGoldAccent.copy(alpha = 0.45f)),
+                    border = BorderStroke(1.dp, goldAccent.copy(alpha = 0.45f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -1595,191 +1209,6 @@ fun OnlineRemainingReminderDialog(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
-        }
-    }
-}
-
-/**
- * Customized Monthly Notification Dialog for LOCAL Monthly Qur'an Rooms:
- * Notifies the user on the 1st of each new month that the new monthly Qur'an distribution
- * is assigned and ready to read and share.
- */
-@Composable
-fun LocalMonthlyNotificationDialog(
-    roomName: String,
-    activeScheduleLabel: String?,
-    onEnableMonthlyAlert: () -> Unit,
-    onDisableMonthlyAlert: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.background,
-            border = BorderStroke(1.3.dp, LocalBlueAccent.copy(alpha = 0.6f)),
-            tonalElevation = 8.dp,
-            shadowElevation = 16.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp)
-                .widthIn(max = 460.dp)
-                .testTag("local_monthly_notification_dialog")
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(LocalBlueAccent.copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
-                                tint = LocalBlueAccent,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Monthly Qur'an Rotation Alert",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Local Schedule • \"$roomName\"",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Surface(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, LocalBlueAccent.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "New Month Ready Notification",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Whenever a new month begins, you'll receive a customized notification letting you know that the new month's Qur'an Para rotation for \"$roomName\" is assigned and ready to read and share with everyone.",
-                            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 19.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (!activeScheduleLabel.isNullOrBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = LocalBlueAccent.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, LocalBlueAccent.copy(alpha = 0.45f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 11.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = LocalBlueAccent,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = activeScheduleLabel,
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Surface(
-                                onClick = onDisableMonthlyAlert,
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface
-                            ) {
-                                Text(
-                                    text = "Turn Off",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SecondaryEditorialButton(
-                        text = "Close",
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    )
-                    PrimarySanctuaryButton(
-                        text = if (activeScheduleLabel.isNullOrBlank()) "Enable Monthly Alert" else "Refresh Alert",
-                        icon = Icons.Default.NotificationsActive,
-                        onClick = onEnableMonthlyAlert,
-                        modifier = Modifier.weight(1.35f)
-                    )
-                }
             }
         }
     }

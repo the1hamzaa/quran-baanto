@@ -13,17 +13,17 @@ import com.example.data.db.ReadingPlanEntity
 import com.example.data.db.StreakCircleEntity
 import com.example.data.db.StreakCircleMemberEntity
 import com.example.data.db.StreakEntity
+import com.example.data.preferences.UserPreferencesDataStore
 import com.example.util.ServerSupportAdManager
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.example.data.preferences.UserPreferencesDataStore
-import kotlinx.coroutines.flow.map
-import java.time.LocalDate
 
 class StreakViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -47,11 +47,14 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
     val streakCirclesState: StateFlow<List<StreakCircleEntity>> = streakRepository.streakCirclesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allCircleMembersState: StateFlow<List<StreakCircleMemberEntity>> = streakRepository.allCircleMembersFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val recentLogsState: StateFlow<List<DailyLogEntity>> = streakRepository.recentDailyLogsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _todayLog = MutableStateFlow<DailyLogEntity?>(null)
-    val todayLog: StateFlow<DailyLogEntity?> = _todayLog.asStateFlow()
+    val todayLog: StateFlow<DailyLogEntity?> = streakDao.getDailyLog(streakRepository.getTodayKey())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _adWatchStatus = MutableStateFlow<String?>(null)
     val adWatchStatus: StateFlow<String?> = _adWatchStatus.asStateFlow()
@@ -59,21 +62,24 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
     init {
         viewModelScope.launch {
             streakRepository.evaluateStreakRollover()
-            refreshTodayLog()
-        }
-    }
-
-    fun refreshTodayLog() {
-        viewModelScope.launch {
-            val log = streakDao.getDailyLogDirect(streakRepository.getTodayKey())
-            _todayLog.value = log
         }
     }
 
     fun optInToStreak(dailyTargetAyahs: Int = 10) {
         viewModelScope.launch {
             streakRepository.optInToStreak(dailyTargetAyahs)
-            refreshTodayLog()
+        }
+    }
+
+    fun dismissStreakOnboarding() {
+        viewModelScope.launch {
+            streakRepository.dismissStreakOnboarding()
+        }
+    }
+
+    fun reopenStreakOnboarding() {
+        viewModelScope.launch {
+            streakRepository.reopenStreakOnboarding()
         }
     }
 
@@ -82,20 +88,18 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
         surahNumber: Int,
         ayahNumber: Int,
         paraNumber: Int,
-        surahName: String
+        surahName: String,
+        explicitPageNumber: Int? = null
     ) {
         viewModelScope.launch {
-            val currentStreak = streakState.value
-            if (currentStreak?.isOptedIn == true) {
-                streakRepository.recordAyahRecitation(
-                    ayahsIncrement = ayahsCount,
-                    surahNumber = surahNumber,
-                    ayahNumber = ayahNumber,
-                    paraNumber = paraNumber,
-                    surahName = surahName
-                )
-                refreshTodayLog()
-            }
+            streakRepository.recordAyahRecitation(
+                ayahsIncrement = ayahsCount,
+                surahNumber = surahNumber,
+                ayahNumber = ayahNumber,
+                paraNumber = paraNumber,
+                surahName = surahName,
+                explicitPageNumber = explicitPageNumber
+            )
         }
     }
 
@@ -106,7 +110,6 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val currentStreak = streakState.value ?: return
 
-        // Check if shield was used recently (within 7 days)
         if (!streakRepository.canUseFreezeShieldCooldown(currentStreak.lastFreezeShieldUsedDate)) {
             val remaining = streakRepository.getDaysUntilNextFreezeShieldAvailable(currentStreak.lastFreezeShieldUsedDate)
             onSuccess(FreezeShieldAdResult.CooldownActive(remaining))
@@ -136,14 +139,64 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
                     _adWatchStatus.value = "Ad skipped or closed before completion."
                 }
             },
-            onAdDismissed = {
-                // Ad completed
-            }
+            onAdDismissed = {}
         )
     }
 
     fun clearAdStatus() {
         _adWatchStatus.value = null
+    }
+
+    fun createFinishQuranPlan(
+        durationDays: Int,
+        startPage: Int = 1,
+        dailyReminderEnabled: Boolean = true,
+        onCreated: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            streakRepository.createFinishQuranPlan(durationDays, startPage, dailyReminderEnabled)
+            onCreated()
+        }
+    }
+
+    fun createMemorizePlan(
+        title: String,
+        surahNumber: Int?,
+        versesPerDay: Int,
+        totalVerses: Int,
+        dailyReminderEnabled: Boolean = true,
+        onCreated: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            streakRepository.createMemorizePlan(title, surahNumber, versesPerDay, totalVerses, dailyReminderEnabled)
+            onCreated()
+        }
+    }
+
+    fun createWeeklyPlan(
+        title: String,
+        surahNumber: Int?,
+        dayOfWeek: Int,
+        totalWeeks: Int = 52,
+        dailyReminderEnabled: Boolean = true,
+        onCreated: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            streakRepository.createWeeklyPlan(title, surahNumber, dayOfWeek, totalWeeks, dailyReminderEnabled)
+            onCreated()
+        }
+    }
+
+    fun markPlanTodayDone(planId: Long) {
+        viewModelScope.launch {
+            streakRepository.markPlanTodayDone(planId)
+        }
+    }
+
+    fun deletePlan(planId: Long) {
+        viewModelScope.launch {
+            streakRepository.deletePlan(planId)
+        }
     }
 
     fun createDailyAyahPlan(title: String, dailyGoal: Int, durationDays: Int) {
@@ -170,13 +223,18 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun generateCirclePasscode(name: String): String =
+        streakRepository.generateCirclePasscode(name)
+
     fun createStreakCircle(
         name: String,
         creatorName: String,
+        colorIndex: Int = 0,
+        customPasscode: String? = null,
         onCreated: (StreakCircleEntity) -> Unit
     ) {
         viewModelScope.launch {
-            val circleId = streakRepository.createStreakCircle(name, creatorName)
+            val circleId = streakRepository.createStreakCircle(name, creatorName, colorIndex, customPasscode)
             val circle = streakDao.getCircleByIdDirect(circleId)
             if (circle != null) {
                 onCreated(circle)
@@ -187,16 +245,28 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
     fun joinStreakCircle(
         passcode: String,
         memberName: String,
-        onResult: (success: Boolean, message: String) -> Unit
+        onResult: (success: Boolean, circleId: Long?, message: String) -> Unit
     ) {
         viewModelScope.launch {
             val circleId = streakRepository.joinStreakCircle(passcode, memberName)
             if (circleId != null) {
                 val circle = streakDao.getCircleByIdDirect(circleId)
-                onResult(true, "Successfully joined '${circle?.name ?: "Circle"}'!")
+                onResult(true, circleId, "Successfully joined '${circle?.name ?: "Circle"}'!")
             } else {
-                onResult(false, "Circle with passcode '$passcode' was not found.")
+                onResult(false, null, "Circle with code '$passcode' was not found.")
             }
+        }
+    }
+
+    fun nudgeCircleMember(memberId: Long) {
+        viewModelScope.launch {
+            streakRepository.nudgeCircleMember(memberId)
+        }
+    }
+
+    fun deleteCircle(circleId: Long) {
+        viewModelScope.launch {
+            streakRepository.deleteCircle(circleId)
         }
     }
 
@@ -208,7 +278,7 @@ class StreakViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun getCircleMembers(circleId: Long): kotlinx.coroutines.flow.Flow<List<StreakCircleMemberEntity>> {
+    fun getCircleMembers(circleId: Long): Flow<List<StreakCircleMemberEntity>> {
         return streakRepository.getMembersForCircle(circleId)
     }
 }

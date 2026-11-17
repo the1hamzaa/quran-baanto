@@ -175,7 +175,8 @@ class DistributionRepository(private val dao: DistributionDao) {
                 completedTimestamp = existing?.completedTimestamp,
                 hasPendingSync = existing?.hasPendingSync ?: false,
                 lastModifiedTimestamp = System.currentTimeMillis(),
-                lastSyncedTimestamp = existing?.lastSyncedTimestamp ?: 0L
+                lastSyncedTimestamp = existing?.lastSyncedTimestamp ?: 0L,
+                isHost = existing?.isHost ?: true
             )
 
             if (type == DistributionType.ONE_TIME_KHATM && allocations.isEmpty()) {
@@ -224,7 +225,8 @@ class DistributionRepository(private val dao: DistributionDao) {
                         completedCycleMonthsCsv = prev?.completedCycleMonthsCsv ?: "",
                         isGuestEntry = prev?.isGuestEntry ?: false,
                         addedByProfileName = prev?.addedByProfileName ?: "",
-                        isPinned = prev?.isPinned ?: false
+                        isPinned = prev?.isPinned ?: false,
+                        isAdmin = prev?.isAdmin ?: false
                     )
                 }
             }
@@ -344,6 +346,7 @@ class DistributionRepository(private val dao: DistributionDao) {
                     isGuestEntry = dto.isGuestEntry,
                     addedByProfileName = localMatch?.addedByProfileName ?: "",
                     isPinned = localMatch?.isPinned ?: false,
+                    isAdmin = dto.isAdmin,
                     hasPendingSync = false,
                     lastModifiedTimestamp = now
                 )
@@ -426,7 +429,8 @@ class DistributionRepository(private val dao: DistributionDao) {
         memberName: String,
         requestedCount: Int,
         isGuest: Boolean,
-        addedByProfileName: String
+        addedByProfileName: String,
+        specificStartPara: Int? = null
     ): Boolean {
         if (memberName.isBlank() || requestedCount <= 0) return false
         val dist = dao.getDistributionById(distributionId) ?: return false
@@ -438,12 +442,13 @@ class DistributionRepository(private val dao: DistributionDao) {
         val actualCount = requestedCount.coerceAtMost(remaining)
         if (actualCount <= 0) return false
 
-        val nextOrder = (existing.maxOfOrNull { it.displayOrder } ?: 0) + 1
+        val nextOrder = specificStartPara ?: ((existing.maxOfOrNull { it.displayOrder } ?: 0) + 1)
         val newParticipant = ParticipantEntity(
             distributionId = distributionId,
             name = FirebaseCoreManager.sanitizeInput(memberName),
             allocatedCount = actualCount,
             displayOrder = nextOrder,
+            specificParaNumber = specificStartPara,
             isCompleted = false,
             isGuestEntry = isGuest,
             addedByProfileName = FirebaseCoreManager.sanitizeInput(addedByProfileName)
@@ -453,6 +458,107 @@ class DistributionRepository(private val dao: DistributionDao) {
             FirebaseCoreManager.upsertSingleParticipantInFirestore(dist, newParticipant)
         }
         return true
+    }
+
+    /**
+     * Claims specific Paras selected by the user in an Online Monthly Khatm.
+     * Groups selected Paras into contiguous blocks (e.g. [4, 5] -> start=4, count=2;
+     * [2, 5, 6] -> (start=2, count=1), (start=5, count=2)) so RotationEngine advances
+     * each block accurately month after month without overwriting specific user picks.
+     */
+    suspend fun joinAndClaimSpecificParas(
+        distributionId: Long,
+        memberName: String,
+        selectedParas: List<Int>,
+        isGuest: Boolean,
+        addedByProfileName: String
+    ): Boolean {
+        val cleanName = FirebaseCoreManager.sanitizeInput(memberName)
+        if (cleanName.isBlank() || selectedParas.isEmpty()) return false
+        val dist = dao.getDistributionById(distributionId) ?: return false
+        if (dist.isClosedForever) return false
+
+        val existing = dao.getParticipantsForDistributionList(distributionId)
+        val existingAllocations = existing.map {
+            ParticipantAllocation(
+                id = it.id,
+                name = it.name,
+                count = it.allocatedCount,
+                displayOrder = it.specificParaNumber ?: it.displayOrder,
+                specificParas = if (it.specificParaNumber != null) listOf(it.specificParaNumber) else emptyList()
+            )
+        }
+        val cal = Calendar.getInstance()
+        val alreadyOccupied = RotationEngine.calculateAssignments(
+            participants = existingAllocations,
+            startYear = dist.startYear,
+            startMonth = dist.startMonth,
+            targetYear = cal.get(Calendar.YEAR),
+            targetMonth = cal.get(Calendar.MONTH) + 1
+        ).flatMap { it.assignedParas }.toSet()
+
+        val remainingQuota = (dist.totalTarget - existing.sumOf { it.allocatedCount }).coerceAtLeast(0)
+        val freeSelected = selectedParas
+            .distinct()
+            .filter { it in 1..30 && it !in alreadyOccupied }
+            .sorted()
+            .take(remainingQuota)
+
+        if (freeSelected.isEmpty()) return false
+
+        // Split freeSelected into contiguous runs
+        val runs = mutableListOf<Pair<Int, Int>>() // (startPara, count)
+        var runStart = freeSelected.first()
+        var runCount = 1
+        for (i in 1 until freeSelected.size) {
+            if (freeSelected[i] == freeSelected[i - 1] + 1) {
+                runCount++
+            } else {
+                runs.add(runStart to runCount)
+                runStart = freeSelected[i]
+                runCount = 1
+            }
+        }
+        runs.add(runStart to runCount)
+
+        val cleanAddedBy = FirebaseCoreManager.sanitizeInput(addedByProfileName)
+        val existingMemberIsAdmin = existing.any {
+            it.name.trim().equals(cleanName, ignoreCase = true) && it.isGuestEntry == isGuest && it.isAdmin
+        }
+        for ((startPara, count) in runs) {
+            val newParticipant = ParticipantEntity(
+                distributionId = distributionId,
+                name = cleanName,
+                allocatedCount = count,
+                displayOrder = startPara,
+                specificParaNumber = startPara,
+                isCompleted = false,
+                isGuestEntry = isGuest,
+                addedByProfileName = cleanAddedBy,
+                isAdmin = existingMemberIsAdmin
+            )
+            dao.insertParticipant(newParticipant)
+            if (dist.isOnline) {
+                FirebaseCoreManager.upsertSingleParticipantInFirestore(dist, newParticipant)
+            }
+        }
+        return true
+    }
+
+    suspend fun setMemberAdminRole(
+        distributionId: Long,
+        memberName: String,
+        isGuest: Boolean,
+        isAdmin: Boolean
+    ) {
+        dao.updateMemberAdminRole(distributionId, memberName, isGuest, isAdmin)
+        syncDistributionWithFirestore(distributionId)
+    }
+
+    suspend fun updateParticipantAdminRole(participantId: Long, isAdmin: Boolean) {
+        dao.updateParticipantAdminRole(participantId, isAdmin)
+        val p = dao.getParticipantById(participantId) ?: return
+        syncDistributionWithFirestore(p.distributionId)
     }
 
     suspend fun removeParticipantClaim(participantId: Long) {
@@ -739,7 +845,8 @@ class DistributionRepository(private val dao: DistributionDao) {
                 startMonth = cloudRoom.startMonth,
                 roundNumber = cloudRoom.roundNumber,
                 isClosedForever = cloudRoom.isClosedForever,
-                closedSummaryText = cloudRoom.closedSummaryText
+                closedSummaryText = cloudRoom.closedSummaryText,
+                isHost = false
             )
             val cloudParticipants = cloudRoom.participants
                 .sortedBy { it.displayOrder }
@@ -753,7 +860,8 @@ class DistributionRepository(private val dao: DistributionDao) {
                         specificParaNumber = dto.specificParaNumber,
                         isCompleted = dto.isCompleted,
                         completedCycleMonthsCsv = dto.completedMonthsCsv,
-                        isGuestEntry = dto.isGuestEntry
+                        isGuestEntry = dto.isGuestEntry,
+                        isAdmin = dto.isAdmin
                     )
                 }
             return dao.insertFullDistribution(cloudEntity, cloudParticipants)
@@ -792,7 +900,8 @@ class DistributionRepository(private val dao: DistributionDao) {
             totalTarget = targetCount,
             startYear = cal.get(Calendar.YEAR),
             startMonth = cal.get(Calendar.MONTH) + 1,
-            roundNumber = 1
+            roundNumber = 1,
+            isHost = false
         )
         return dao.insertDistribution(newEntity)
     }

@@ -78,12 +78,21 @@ interface StreakDao {
     @Query("DELETE FROM streak_circles WHERE id = :id")
     suspend fun deleteCircleById(id: Long)
 
+    @Query("SELECT * FROM reading_plans WHERE id = :id LIMIT 1")
+    suspend fun getPlanByIdDirect(id: Long): ReadingPlanEntity?
+
     // --- Streak Circle Members ---
-    @Query("SELECT * FROM streak_circle_members WHERE circleId = :circleId ORDER BY isHost DESC, memberName ASC")
+    @Query("SELECT * FROM streak_circle_members ORDER BY isCurrentUser DESC, isHost DESC, memberName ASC")
+    fun getAllCircleMembers(): Flow<List<StreakCircleMemberEntity>>
+
+    @Query("SELECT * FROM streak_circle_members WHERE circleId = :circleId ORDER BY isCurrentUser DESC, isHost DESC, memberName ASC")
     fun getMembersForCircle(circleId: Long): Flow<List<StreakCircleMemberEntity>>
 
-    @Query("SELECT * FROM streak_circle_members WHERE circleId = :circleId ORDER BY isHost DESC, memberName ASC")
+    @Query("SELECT * FROM streak_circle_members WHERE circleId = :circleId ORDER BY isCurrentUser DESC, isHost DESC, memberName ASC")
     suspend fun getMembersForCircleDirect(circleId: Long): List<StreakCircleMemberEntity>
+
+    @Query("SELECT * FROM streak_circle_members WHERE id = :id LIMIT 1")
+    suspend fun getMemberByIdDirect(id: Long): StreakCircleMemberEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMember(member: StreakCircleMemberEntity): Long

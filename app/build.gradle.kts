@@ -142,12 +142,13 @@ dependencies {
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
-  // implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.zxing.core)
-  implementation(libs.play.services.ads)
-  // implementation(libs.logging.interceptor)
+  implementation(libs.play.services.ads) {
+    exclude(group = "androidx.privacysandbox.ads", module = "ads-adservices")
+    exclude(group = "androidx.privacysandbox.ads", module = "ads-adservices-java")
+  }
   // implementation(libs.moshi.kotlin)
   // implementation(libs.okhttp)
   // implementation(libs.play.services.location)

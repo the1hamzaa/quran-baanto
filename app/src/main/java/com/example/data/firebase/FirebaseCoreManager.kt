@@ -58,6 +58,7 @@ data class FirestoreRoomParticipantDto(
     val isGuestEntry: Boolean = false,
     val isCompleted: Boolean = false,
     val completedMonthsCsv: String = "",
+    val isAdmin: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -111,8 +112,17 @@ object FirebaseCoreManager {
     private val _currentUserProfile = MutableStateFlow<FirebaseUserProfile?>(null)
     val currentUserProfile: StateFlow<FirebaseUserProfile?> = _currentUserProfile.asStateFlow()
 
+    @Volatile
+    private var cloudDisabledForTest = false
+
+    @androidx.annotation.VisibleForTesting
+    internal fun setCloudDisabledForTesting(disabled: Boolean) {
+        cloudDisabledForTest = disabled
+    }
+
     val isCloudReady: Boolean
-        get() = _connectionStatus.value == FirebaseConnectionStatus.READY &&
+        get() = !cloudDisabledForTest &&
+            _connectionStatus.value == FirebaseConnectionStatus.READY &&
             firebaseFirestore != null &&
             firebaseAuth != null
 
@@ -400,6 +410,7 @@ object FirebaseCoreManager {
                     "isGuestEntry" to p.isGuestEntry,
                     "isCompleted" to p.isCompleted,
                     "completedMonthsCsv" to sanitizeInput(p.completedCycleMonthsCsv, 400),
+                    "isAdmin" to p.isAdmin,
                     "updatedAt" to System.currentTimeMillis()
                 )
                 batch.set(docRef, pData, SetOptions.merge())
@@ -452,6 +463,7 @@ object FirebaseCoreManager {
                 "isGuestEntry" to participant.isGuestEntry,
                 "isCompleted" to participant.isCompleted,
                 "completedMonthsCsv" to sanitizeInput(participant.completedCycleMonthsCsv, 400),
+                "isAdmin" to participant.isAdmin,
                 "updatedAt" to System.currentTimeMillis()
             )
             docRef.set(pData, SetOptions.merge()).awaitResult()
@@ -596,6 +608,7 @@ object FirebaseCoreManager {
                     isGuestEntry = doc.getBoolean("isGuestEntry") ?: false,
                     isCompleted = doc.getBoolean("isCompleted") ?: false,
                     completedMonthsCsv = sanitizeInput(doc.getString("completedMonthsCsv") ?: "", 400),
+                    isAdmin = doc.getBoolean("isAdmin") ?: false,
                     updatedAt = doc.getLong("updatedAt") ?: 0L
                 )
             }
@@ -661,6 +674,7 @@ object FirebaseCoreManager {
                                 isGuestEntry = doc.getBoolean("isGuestEntry") ?: false,
                                 isCompleted = doc.getBoolean("isCompleted") ?: false,
                                 completedMonthsCsv = sanitizeInput(doc.getString("completedMonthsCsv") ?: "", 400),
+                                isAdmin = doc.getBoolean("isAdmin") ?: false,
                                 updatedAt = doc.getLong("updatedAt") ?: 0L
                             )
                         }
@@ -713,15 +727,18 @@ object FirebaseCoreManager {
         )
     }
 
-    private suspend fun <T> Task<T>.awaitResult(): T = suspendCancellableCoroutine { cont ->
-        addOnSuccessListener { result ->
-            if (cont.isActive) cont.resume(result)
-        }
-        addOnFailureListener { exc ->
-            if (cont.isActive) cont.resumeWithException(exc)
-        }
-        addOnCanceledListener {
-            if (cont.isActive) cont.cancel()
+    private suspend fun <T> Task<T>.awaitResult(): T = kotlinx.coroutines.withTimeout(5_000L) {
+        val directExecutor = java.util.concurrent.Executor { it.run() }
+        suspendCancellableCoroutine { cont ->
+            addOnSuccessListener(directExecutor) { result ->
+                if (cont.isActive) cont.resume(result)
+            }
+            addOnFailureListener(directExecutor) { exc ->
+                if (cont.isActive) cont.resumeWithException(exc)
+            }
+            addOnCanceledListener(directExecutor) {
+                if (cont.isActive) cont.cancel()
+            }
         }
     }
 }

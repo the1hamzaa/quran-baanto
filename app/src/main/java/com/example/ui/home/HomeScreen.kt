@@ -1,1167 +1,594 @@
 package com.example.ui.home
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.TrackChanges
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.db.DistributionEntity
 import com.example.data.db.DistributionType
-import com.example.data.quran.ReadMode
-import com.example.ui.components.ChiseledSanctuaryButton
-import com.example.ui.components.CircularProgressArc
-import com.example.ui.components.LuminousOrbButton
-import com.example.ui.components.ManuscriptOrnamentDivider
-import com.example.ui.components.OctagonalNumberMedallion
-import com.example.ui.components.SanctuaryGeometricGlyph
-import com.example.ui.distribution.ShareDistributionDialog
-import com.example.ui.theme.LocalBlueAccent
-import com.example.ui.theme.OnlineGoldAccent
-import com.example.ui.theme.SanctuaryEmeraldDark
-import com.example.ui.theme.SanctuaryEmeraldMedium
-import com.example.ui.theme.SanctuaryGoldBright
-import com.example.ui.theme.SanctuaryGoldHalo
-import com.example.ui.theme.SanctuaryGoldWarm
+import com.example.ui.components.ArchProgress
+import com.example.ui.components.BubbleChain
+import com.example.ui.components.DayBubbleItem
+import com.example.ui.components.DayBubbleStatus
+import com.example.ui.theme.AmiriFontFamily
+import com.example.ui.theme.FrauncesFontFamily
+import com.example.ui.theme.InterFontFamily
+import com.example.ui.theme.QuranBaantoDesignSystem
 import com.example.ui.viewmodel.DistributionViewModel
 import com.example.ui.viewmodel.QuranViewModel
 import com.example.ui.viewmodel.StreakViewModel
-import com.example.util.HijriDateUtils
 import java.util.Calendar
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
+/**
+ * EXACT HOME SCREEN IMPLEMENTATION
+ * Matches the target design screenshots precisely with zero text wrapping and silky smooth performance.
+ *
+ * - Hero: Displays exact "Page 38" (or "Page 1" for new users), "Al-Baqarah · Juz 2",
+ *   Arabic "البَقَرَة" in pine, and "Resume reading →" in wine. No text wrapping.
+ * - Today's Progress: Real pages read today (defaults to 0, 0/10 with empty arch fill).
+ * - This Week: Dynamic 7-day streak bubbles (clean empty state for new users).
+ * - Your Circles: Real distribution circle or clean empty state without awkward wrapping.
+ * - Bottom Navigation: Bold active tab with 44x22dp rising gold semicircle.
+ */
 @Composable
 fun HomeScreen(
     distributionViewModel: DistributionViewModel,
     quranViewModel: QuranViewModel? = null,
     streakViewModel: StreakViewModel? = null,
-    onNavigateToQuran: () -> Unit,
-    onNavigateToDistributions: () -> Unit,
-    onNavigateToStreaks: () -> Unit = {},
-    onCreateNewDistribution: (DistributionType) -> Unit = { onNavigateToDistributions() },
-    onOpenDistributionDetail: (Long) -> Unit,
+    onNavigateToStreaks: () -> Unit,
+    onCreateNewDistribution: (DistributionType) -> Unit = {},
+    onOpenDistributionDetail: (Long) -> Unit = {},
     onOpenParaReader: (Int, Int?, Int?) -> Unit = { _, _, _ -> },
     onOpenSurahReader: (Int, Int?) -> Unit = { _, _ -> },
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = QuranBaantoDesignSystem.colors
+
+    // Live state
+    val lastBookmark by quranViewModel?.lastReadBookmark?.collectAsState()
+        ?: remember { androidx.compose.runtime.mutableStateOf(null) }
+    val todayLog by streakViewModel?.todayLog?.collectAsState()
+        ?: remember { androidx.compose.runtime.mutableStateOf(null) }
+    val streak by streakViewModel?.streakState?.collectAsState()
+        ?: remember { androidx.compose.runtime.mutableStateOf(null) }
+    val recentLogs by streakViewModel?.recentLogsState?.collectAsState()
+        ?: remember { androidx.compose.runtime.mutableStateOf(emptyList()) }
     val distributions by distributionViewModel.distributions.collectAsState()
     val participantsByDistribution by distributionViewModel.participantsByDistribution.collectAsState()
-    var activeShareSummaryText by remember { mutableStateOf<String?>(null) }
 
-    val streak by streakViewModel?.streakState?.collectAsState() ?: remember { mutableStateOf(null) }
-    val todayLog by streakViewModel?.todayLog?.collectAsState() ?: remember { mutableStateOf(null) }
+    val activePlans by streakViewModel?.activePlansState?.collectAsState()
+        ?: remember { androidx.compose.runtime.mutableStateOf(emptyList()) }
+    val activeFinishPlan = activePlans.firstOrNull {
+        it.planType == com.example.data.db.PlanType.FINISH_QURAN ||
+            it.planType == com.example.data.db.PlanType.PARA_RANGE_TARGET
+    }
 
-    val lastReadBookmark by quranViewModel?.lastReadBookmark?.collectAsState()
-        ?: remember { mutableStateOf(null) }
-    val allBookmarks by quranViewModel?.allBookmarks?.collectAsState()
-        ?: remember { mutableStateOf(emptyList()) }
+    // 1. Pages read today (exact distinct Madinah Mushaf pages read today, synced with Reader, Plans & Circles)
+    val pagesReadToday = todayLog?.pagesReadCount ?: 0
+    val pagesGoal = (activeFinishPlan?.dailyTargetPages ?: todayLog?.targetPagesCount ?: 10).coerceAtLeast(1)
+    val progress = (pagesReadToday.toFloat() / pagesGoal.toFloat()).coerceIn(0f, 1f)
 
-    val currentCal = remember { Calendar.getInstance() }
-    val currentYear = remember { currentCal.get(Calendar.YEAR) }
-    val currentMonth = remember { currentCal.get(Calendar.MONTH) + 1 }
-    val currentDateInfo = remember(currentYear, currentMonth) {
-        HijriDateUtils.getMonthInfo(
-            year = currentYear,
-            month = currentMonth
+    // 2. Hero Section: Exactly matching screenshot format (Page X, Surah · Juz Y, Arabic)
+    val hasBookmark = lastBookmark != null
+    val headerKicker = "CONTINUE"
+    val bookmarkPage = if (hasBookmark) {
+        com.example.data.quran.QuranPageMapper.getPageForAyah(
+            lastBookmark!!.surahNumber,
+            lastBookmark!!.ayahNumber,
+            lastBookmark!!.id
         )
+    } else 1
+    val heroTitle = "Page $bookmarkPage"
+    val heroSubtitle = if (hasBookmark) {
+        val juz = com.example.data.quran.QuranPageMapper.getJuzForPage(bookmarkPage)
+        "${lastBookmark!!.title} · Juz $juz"
+    } else {
+        "Al-Fatihah · Juz 1"
     }
+    val heroArabic = if (hasBookmark && lastBookmark!!.arabicTitle.isNotBlank()) {
+        lastBookmark!!.arabicTitle
+    } else {
+        "الفَاتِحَة"
+    }
+    val resumeActionText = if (hasBookmark) "Resume reading →" else "Start reading →"
 
-    val userProfileName by distributionViewModel.userProfileName.collectAsState()
+    // 3. This Week: 7 Overlapping Bubbles with day-of-week letters
+    // - Days prior to today: Wine if user read, Grey if missed
+    // - Today: Gold outline (pine if read today)
+    // - Future days: Faint soft neutral
+    val weekBubbleStates = remember(streak, recentLogs, todayLog) {
+        val dayLetters = listOf("M", "T", "W", "T", "F", "S", "S")
+        val cal = Calendar.getInstance()
+        val dayOfWeekIndex = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 // Monday = 0 .. Sunday = 6
 
-    // Find pending Khatm where user has an uncompleted Para or active portion
-    val pendingKhatmInfo = remember(distributions, participantsByDistribution, userProfileName, currentYear, currentMonth) {
-        var found: Triple<DistributionEntity, Int, Boolean>? = null
-        for (dist in distributions) {
-            val parts = participantsByDistribution[dist.id].orEmpty()
-            val userPart = parts.firstOrNull { p ->
-                (userProfileName.isNotBlank() && (p.name.equals(userProfileName, ignoreCase = true) || p.addedByProfileName.equals(userProfileName, ignoreCase = true))) ||
-                p.isPinned
-            }
-            if (userPart != null) {
-                val isDone = if (dist.type == DistributionType.KHATM) {
-                    userPart.isCompletedForMonth(currentYear, currentMonth)
-                } else {
-                    userPart.isCompleted
-                }
-                val assignedPara = if (dist.type == DistributionType.ONE_TIME_KHATM && userPart.specificParaNumber != null) {
-                    userPart.specificParaNumber!!
-                } else if (dist.type == DistributionType.KHATM) {
-                    val assignments = distributionViewModel.computeAssignmentsForDistribution(dist, parts, currentYear, currentMonth)
-                    assignments.firstOrNull { it.participantId == userPart.id }?.startPara ?: 1
-                } else {
-                    1
-                }
-                found = Triple(dist, assignedPara, isDone)
-                if (!isDone) break
-            }
+        val todayCalendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
-        found ?: distributions.firstOrNull()?.let { Triple(it, 1, false) }
+
+        val mondayCal = Calendar.getInstance().apply {
+            timeInMillis = todayCalendar.timeInMillis
+            add(Calendar.DAY_OF_YEAR, -dayOfWeekIndex)
+        }
+
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        val currentStreak = streak?.currentStreakDays ?: 0
+        val hasReadToday = (todayLog?.pagesReadCount ?: 0) > 0 || (todayLog?.hasMetGoal == true)
+
+        dayLetters.mapIndexed { index, letter ->
+            val bubbleCal = (mondayCal.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_YEAR, index)
+            }
+            val dateKey = dateFormat.format(bubbleCal.time)
+
+            val status = when {
+                index < dayOfWeekIndex -> {
+                    val loggedOnDay = recentLogs.any { it.dateKey == dateKey && (it.pagesReadCount > 0 || it.hasMetGoal) }
+                    val daysAgo = dayOfWeekIndex - index
+                    val withinActiveStreak = currentStreak >= daysAgo
+                    if (loggedOnDay || withinActiveStreak) {
+                        DayBubbleStatus.PAST_READ
+                    } else {
+                        DayBubbleStatus.PAST_MISSED
+                    }
+                }
+                index == dayOfWeekIndex -> {
+                    if (hasReadToday) {
+                        DayBubbleStatus.TODAY_READ
+                    } else {
+                        DayBubbleStatus.TODAY
+                    }
+                }
+                else -> {
+                    DayBubbleStatus.FUTURE
+                }
+            }
+
+            DayBubbleItem(
+                dayLetter = letter,
+                status = status
+            )
+        }
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(colors.background)
     ) {
-        // 1. Daily Noor Green Intro Header with Rotating Ayahs & Settings Button (matching reference drawing)
-        DailyNoorTopBanner(
-            hijriDate = currentDateInfo.hijriFullText,
-            gregorianDate = currentDateInfo.gregorianFullText,
-            onOpenSettings = onOpenSettings
-        )
+        // Decorative background cropped bubbles at top right
+        TopRightBackgroundBubbles(isDark = colors.isDark)
 
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isWideScreen = maxWidth >= 640.dp
-            val horizontalPad = if (isWideScreen) 28.dp else 20.dp
-
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Upper Content Area
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(22.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
-                // 2. Continue From Last Bookmark (Prominent Spotlight beneath header, matching user drawing)
-                Column(
+                // Top Header Row: "CONTINUE" and 44dp Settings Button
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = horizontalPad)
-                ) {
-                    ContinueFromLastBookmarkCard(
-                        bookmark = lastReadBookmark,
-                        totalBookmarks = allBookmarks.size,
-                        onResume = {
-                            lastReadBookmark?.let { bm ->
-                                if (bm.mode == ReadMode.PARA) {
-                                    quranViewModel?.selectPara(bm.id, bm.ayahNumber, bm.surahNumber)
-                                    onOpenParaReader(bm.id, bm.ayahNumber, bm.surahNumber)
-                                } else {
-                                    quranViewModel?.selectSurah(bm.id, bm.ayahNumber)
-                                    onOpenSurahReader(bm.id, bm.ayahNumber)
-                                }
-                            }
-                        },
-                        onStartQuran = onNavigateToQuran
-                    )
-                }
-
-                // 3. Scroll Wheel: Latest Khatm & Highlights
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = horizontalPad),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Latest Khatm & Highlights",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.5.sp
-                            ),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Swipe →",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = horizontalPad),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        // Card 1: Active Khatm where user's portion is left to recite
-                        if (pendingKhatmInfo != null) {
-                            val (dist, assignedPara, isDone) = pendingKhatmInfo
-                            item {
-                                LatestKhatmDeckCard(
-                                    distribution = dist,
-                                    assignedPara = assignedPara,
-                                    isAssignedCompleted = isDone,
-                                    onOpenDistribution = { onOpenDistributionDetail(dist.id) },
-                                    onRecitePara = { p -> onOpenParaReader(p, null, null) },
-                                    modifier = Modifier.width(290.dp)
-                                )
-                            }
-                        } else {
-                            // Empty state card encouraging creating or joining a Khatm
-                            item {
-                                Surface(
-                                    onClick = onNavigateToDistributions,
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.2.dp, OnlineGoldAccent.copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .width(280.dp)
-                                        .height(175.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(16.dp),
-                                        verticalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = OnlineGoldAccent.copy(alpha = 0.15f)
-                                        ) {
-                                            Text(
-                                                text = "Community Khatm",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = OnlineGoldAccent
-                                                ),
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                            )
-                                        }
-
-                                        Column {
-                                            Text(
-                                                text = "No Active Khatm Session",
-                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = "Create a new Khatm room or join with a room code.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.End
-                                        ) {
-                                            Text(
-                                                text = "Open Khatm →",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Card 2: Live Streak Flame Ember
-                        if (streak?.isOptedIn == true) {
-                            item {
-                                StreakEmberDeckCard(
-                                    streakDays = streak?.currentStreakDays ?: 0,
-                                    ayahsRead = todayLog?.ayahsReadCount ?: 0,
-                                    targetAyahs = todayLog?.targetAyahsCount ?: 10,
-                                    isGoalMet = todayLog?.hasMetGoal == true,
-                                    onContinue = {
-                                        val p = streak?.lastReadPara ?: 1
-                                        val s = streak?.lastReadSurah ?: 1
-                                        val a = streak?.lastReadAyah ?: 1
-                                        quranViewModel?.selectPara(p, a, s)
-                                        onOpenParaReader(p, a, s)
-                                    },
-                                    onOpenStreaks = onNavigateToStreaks,
-                                    modifier = Modifier.width(280.dp)
-                                )
-                            }
-                        } else {
-                            item {
-                                Surface(
-                                    onClick = onNavigateToStreaks,
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.2.dp, Color(0xFFFF9800).copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .width(280.dp)
-                                        .height(175.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(16.dp),
-                                        verticalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color(0xFFFF9800).copy(alpha = 0.15f)
-                                        ) {
-                                            Text(
-                                                text = "Recitation Streak",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFFF9800)
-                                                ),
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                            )
-                                        }
-
-                                        Column {
-                                            Text(
-                                                text = "Ignite Daily Streak",
-                                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = "Build a consistent habit of Quran recitation.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.End
-                                        ) {
-                                            Text(
-                                                text = "Start Streak →",
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFFF9800)
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Shortcut 1: Surah Yasin (Heart of the Qur'an)
-                        item {
-                            HighlightShortcutDeckCard(
-                                title = "Surah Yasin",
-                                arabicTitle = "سُورَة يس",
-                                badgeText = "Heart of Qur'an",
-                                subtitle = "Surah 36 • 83 Verses • Makki",
-                                accentColor = SanctuaryEmeraldMedium,
-                                actionLabel = "Recite Yasin",
-                                onClick = {
-                                    quranViewModel?.selectSurah(36, 1)
-                                    onOpenSurahReader(36, 1)
-                                }
-                            )
-                        }
-
-                        // Shortcut 2: Surah Al-Mulk (Nightly Protection)
-                        item {
-                            HighlightShortcutDeckCard(
-                                title = "Surah Al-Mulk",
-                                arabicTitle = "سُورَة الْمُلْك",
-                                badgeText = "Nightly Protection",
-                                subtitle = "Surah 67 • 30 Verses • Tabarak",
-                                accentColor = Color(0xFF283593),
-                                actionLabel = "Recite Al-Mulk",
-                                onClick = {
-                                    quranViewModel?.selectSurah(67, 1)
-                                    onOpenSurahReader(67, 1)
-                                }
-                            )
-                        }
-
-                        // Shortcut 3: Surah Al-Kahf (Friday Sunnah)
-                        item {
-                            HighlightShortcutDeckCard(
-                                title = "Surah Al-Kahf",
-                                arabicTitle = "سُورَة الْكَهْف",
-                                badgeText = "Friday Sunnah",
-                                subtitle = "Surah 18 • 110 Verses • Luminescence",
-                                accentColor = SanctuaryGoldWarm,
-                                actionLabel = "Recite Al-Kahf",
-                                onClick = {
-                                    quranViewModel?.selectSurah(18, 1)
-                                    onOpenSurahReader(18, 1)
-                                }
-                            )
-                        }
-
-                        // Shortcut 4: Ayat al-Kursi (The Throne Verse)
-                        item {
-                            HighlightShortcutDeckCard(
-                                title = "Ayat al-Kursi",
-                                arabicTitle = "آيَةُ الْكُرْسِي",
-                                badgeText = "Greatest Verse",
-                                subtitle = "Surah Al-Baqarah 2:255 • Protection",
-                                accentColor = Color(0xFF8E24AA),
-                                actionLabel = "Recite Ayah",
-                                onClick = {
-                                    quranViewModel?.selectSurah(2, 255)
-                                    onOpenSurahReader(2, 255)
-                                }
-                            )
-                        }
-
-                        // Shortcut 5: Join Room with Passcode
-                        item {
-                            HighlightShortcutDeckCard(
-                                title = "Join With Passcode",
-                                arabicTitle = "انْضِمَام",
-                                badgeText = "Online Khatm",
-                                subtitle = "Enter room code from friends or family",
-                                accentColor = OnlineGoldAccent,
-                                actionLabel = "Join Room",
-                                icon = Icons.Default.Groups,
-                                onClick = onNavigateToDistributions
-                            )
-                        }
-
-                        // Shortcut 6: Sacred Manuscript Index
-                        item {
-                            HighlightShortcutDeckCard(
-                                title = "All 114 Surahs",
-                                arabicTitle = "الْقُرْآنُ",
-                                badgeText = "Manuscript",
-                                subtitle = "Full index of 114 Surahs & 30 Paras",
-                                accentColor = SanctuaryEmeraldDark,
-                                actionLabel = "Open Index",
-                                icon = Icons.AutoMirrored.Filled.MenuBook,
-                                onClick = onNavigateToQuran
-                            )
-                        }
-                    }
-                }
-
-                // 4. Horizontal Active Sessions Shelf (when user has active distributions)
-                if (distributions.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = horizontalPad),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Active Recitation Circles",
-                                    style = MaterialTheme.typography.titleSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer
-                                ) {
-                                    Text(
-                                        text = "${distributions.size}",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = "View All",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable(onClick = onNavigateToDistributions)
-                            )
-                        }
-
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = horizontalPad),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(distributions) { dist ->
-                                val participants = participantsByDistribution[dist.id].orEmpty()
-                                val completedCount = if (dist.type == DistributionType.KHATM) {
-                                    participants.count { it.isCompletedForMonth(currentYear, currentMonth) }
-                                } else {
-                                    participants.count { it.isCompleted }
-                                }
-                                ActiveSessionShelfCard(
-                                    dist = dist,
-                                    participantsCount = participants.size,
-                                    completedCount = completedCount,
-                                    onClick = { onOpenDistributionDetail(dist.id) },
-                                    onShare = {
-                                        val summary = distributionViewModel.generateShareSummaryForDistribution(
-                                            distribution = dist,
-                                            participants = participants,
-                                            targetYear = currentYear,
-                                            targetMonth = currentMonth
-                                        )
-                                        if (summary.isNotBlank()) activeShareSummaryText = summary
-                                    },
-                                    modifier = Modifier.width(280.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Manuscript Divider for elegant breathing space
-                ManuscriptOrnamentDivider(modifier = Modifier.padding(horizontal = horizontalPad))
-
-                // Generous bottom spacer so the floating 3-button nav dock never overlaps content
-                Spacer(modifier = Modifier.height(110.dp))
-            }
-        }
-    }
-
-    // Share summary dialog
-    activeShareSummaryText?.let { textToShare ->
-        ShareDistributionDialog(
-            shareText = textToShare,
-            onDismiss = { activeShareSummaryText = null }
-        )
-    }
-}
-
-/**
- * Daily Noor Top Banner: The illuminated green sanctuary header with rotating ayahs
- * and settings icon in top right, as specified in the reference sketch.
- */
-@Composable
-private fun DailyNoorTopBanner(
-    hijriDate: String,
-    gregorianDate: String,
-    onOpenSettings: () -> Unit
-) {
-    val rotatingAyahs = remember {
-        listOf(
-            "وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا" to "“And recite the Qur'an with measured recitation.” — Surah Al-Muzzammil (73:4)",
-            "أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ" to "“Verily, in the remembrance of Allah do hearts find rest.” — Surah Ar-Ra'd (13:28)",
-            "إِنَّ هَٰذَا الْقُرْآنَ يَهْدِي لِلَّتِي هِيَ أَقْوَمُ" to "“Indeed, this Qur'an guides to that which is most suitable.” — Surah Al-Isra (17:9)",
-            "خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ" to "“The best among you are those who learn the Qur'an and teach it.”"
-        )
-    }
-    var currentAyahIndex by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(7000)
-            currentAyahIndex = (currentAyahIndex + 1) % rotatingAyahs.size
-        }
-    }
-    val currentAyah = rotatingAyahs[currentAyahIndex]
-
-    Surface(
-        color = SanctuaryEmeraldDark,
-        tonalElevation = 4.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .drawBehind {
-                    // Subtle warm golden radial halo at center top
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(
-                                SanctuaryGoldHalo.copy(alpha = 0.25f),
-                                Color.Transparent
-                            ),
-                            center = Offset(size.width * 0.5f, 0f),
-                            radius = size.width * 0.6f
-                        )
-                    )
-                }
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 20.dp, vertical = 14.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Top Row: App Brand & Date on left, Settings button on right (per sketch)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 16.dp, bottom = 8.dp)
+                        .padding(horizontal = 28.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(SanctuaryEmeraldMedium)
-                                .border(1.2.dp, SanctuaryGoldWarm.copy(alpha = 0.9f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            SanctuaryGeometricGlyph(
-                                size = 22.dp,
-                                primaryColor = SanctuaryGoldBright,
-                                accentColor = SanctuaryGoldWarm,
-                                isQuranGlyph = true
-                            )
-                        }
+                    Text(
+                        text = headerKicker,
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.2.sp,
+                        color = colors.mutedText,
+                        maxLines = 1,
+                        softWrap = false
+                    )
 
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Column {
-                            Text(
-                                text = "Quran Baanto",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.4.sp
-                                ),
-                                color = SanctuaryGoldBright
-                            )
-                            Text(
-                                text = "$hijriDate • $gregorianDate",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-
-                    // Settings Button in top right (per sketch)
-                    Surface(
+                    RoundSettingsButton(
                         onClick = onOpenSettings,
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.25f),
-                        border = BorderStroke(1.dp, SanctuaryGoldWarm.copy(alpha = 0.6f)),
-                        modifier = Modifier
-                            .size(38.dp)
-                            .testTag("home_settings_button")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Settings",
-                                tint = SanctuaryGoldBright,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Rotating Ayah reflection banner inside the illuminated green header
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color.Black.copy(alpha = 0.18f),
-                    border = BorderStroke(0.8.dp, SanctuaryGoldWarm.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = currentAyah.first,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = FontFamily.Serif,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            ),
-                            color = SanctuaryGoldBright,
-                            textAlign = TextAlign.Center
-                        )
-                        Text(
-                            text = currentAyah.second,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 11.5.sp
-                            ),
-                            color = Color.White.copy(alpha = 0.9f),
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-
-/**
- * Deck Card 2: Live Streak Ember Card.
- */
-@Composable
-private fun StreakEmberDeckCard(
-    streakDays: Int,
-    ayahsRead: Int,
-    targetAyahs: Int,
-    isGoalMet: Boolean,
-    onContinue: () -> Unit,
-    onOpenStreaks: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val progress = (ayahsRead.toFloat() / targetAyahs.coerceAtLeast(1)).coerceIn(0f, 1f)
-
-    Card(
-        modifier = modifier
-            .height(175.dp)
-            .clickable(onClick = onOpenStreaks),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
-        ),
-        border = BorderStroke(1.2.dp, Color(0xFFFF9800).copy(alpha = 0.65f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.LocalFireDepartment,
-                        contentDescription = null,
-                        tint = Color(0xFFFF9800),
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "$streakDays Day Streak",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        isDark = colors.isDark
                     )
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (isGoalMet) Color(0xFF2E7D32).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = if (isGoalMet) "Met ✨" else "$ayahsRead/$targetAyahs",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = if (isGoalMet) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
+                Spacer(modifier = Modifier.height(10.dp))
 
-            Column {
-                Text(
-                    text = if (isGoalMet) "Today's goal completed! Keep shining." else "${(targetAyahs - ayahsRead).coerceAtLeast(0)} Ayahs remaining today",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
+                // Hero & Today's Progress Arch Row
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(CircleShape),
-                    color = if (isGoalMet) Color(0xFF2E7D32) else Color(0xFFFF9800),
-                    trackColor = MaterialTheme.colorScheme.surface
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Surface(
-                    onClick = onContinue,
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primary
+                        .padding(horizontal = 28.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    // Left Hero Column
+                    Column(
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Continue", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = Color.White))
-                    }
-                }
-            }
-        }
-    }
-}
+                        Text(
+                            text = heroTitle,
+                            fontFamily = FrauncesFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 56.sp,
+                            lineHeight = 60.sp,
+                            letterSpacing = (-0.5).sp,
+                            color = colors.text,
+                            maxLines = 1,
+                            softWrap = false
+                        )
 
-/**
- * Elegant Shortcut Deck Card in the horizontal Highlights Scroll Wheel.
- */
-@Composable
-private fun HighlightShortcutDeckCard(
-    title: String,
-    arabicTitle: String,
-    badgeText: String,
-    subtitle: String,
-    accentColor: Color,
-    actionLabel: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.PlayArrow,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .width(260.dp)
-            .height(175.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.55f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = accentColor.copy(alpha = 0.15f)
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = heroSubtitle,
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 15.sp,
+                            color = colors.text,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = heroArabic,
+                            fontFamily = AmiriFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 42.sp,
+                            color = colors.pineText,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = resumeActionText,
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp,
+                            textDecoration = TextDecoration.Underline,
+                            color = colors.wineText,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    if (hasBookmark) {
+                                        onOpenSurahReader(lastBookmark!!.surahNumber, lastBookmark!!.ayahNumber)
+                                    } else {
+                                        onOpenSurahReader(1, 1)
+                                    }
+                                }
+                                .testTag("resume_reading_link")
+                        )
+                    }
+
+                    // Right: Arch window progress (dynamic: 0/10 when fresh)
+                    ArchProgress(
+                        pagesRead = pagesReadToday,
+                        pagesGoal = pagesGoal,
+                        progress = progress,
+                        width = 120.dp,
+                        height = 176.dp,
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // "THIS WEEK" Section
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 28.dp)
                 ) {
                     Text(
-                        text = badgeText,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = accentColor
-                        ),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        text = "THIS WEEK",
+                        fontFamily = InterFontFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp,
+                        letterSpacing = 1.1.sp,
+                        color = colors.mutedText,
+                        maxLines = 1
                     )
-                }
 
-                Text(
-                    text = arabicTitle,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.Bold,
-                        color = accentColor
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    BubbleChain(
+                        circleDiameter = 32.dp,
+                        overlap = 10.dp,
+                        days = weekBubbleStates,
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            onNavigateToStreaks()
+                        }
                     )
-                )
-            }
 
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                    Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Surface(
-                    onClick = onClick,
-                    shape = RoundedCornerShape(8.dp),
-                    color = accentColor
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = actionLabel,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                    // Below the bubble chain: exact days if streak exists, or CTA if no streak
+                    val currentStreakCount = streak?.currentStreakDays ?: 0
+                    if (currentStreakCount > 0) {
+                        val streakText = if (currentStreakCount == 1) "1 day reading streak" else "$currentStreakCount days reading streak"
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { onNavigateToStreaks() }
+                        ) {
+                            Text(
+                                text = streakText,
+                                fontFamily = FrauncesFontFamily,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 15.sp,
+                                color = colors.text,
+                                maxLines = 1
                             )
-                        )
+                            val statusNote = if ((todayLog?.pagesReadCount ?: 0) > 0 || (todayLog?.hasMetGoal == true)) {
+                                "· Completed today"
+                            } else {
+                                "· Read today to continue"
+                            }
+                            Text(
+                                text = statusNote,
+                                fontFamily = InterFontFamily,
+                                fontSize = 12.sp,
+                                color = colors.mutedText,
+                                maxLines = 1
+                            )
+                        }
+                    } else {
+                        // Clean CTA to prompt to create a streak
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    if (streak?.isOptedIn != true) {
+                                        streakViewModel?.reopenStreakOnboarding()
+                                    }
+                                    onNavigateToStreaks()
+                                }
+                                .testTag("start_streak_cta")
+                        ) {
+                            Text(
+                                text = "Start a reading streak →",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = colors.wineText,
+                                textDecoration = TextDecoration.Underline,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Read 1 page today",
+                                fontFamily = InterFontFamily,
+                                fontSize = 12.sp,
+                                color = colors.mutedText,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
-            }
-        }
-    }
-}
 
-/**
- * Prominent Continue From Last Bookmark Card, placed directly beneath the header banner
- * as sketched in the user's reference drawing.
- */
-@Composable
-private fun ContinueFromLastBookmarkCard(
-    bookmark: com.example.data.quran.LastReadBookmark?,
-    totalBookmarks: Int,
-    onResume: () -> Unit,
-    onStartQuran: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = if (bookmark != null) onResume else onStartQuran),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.2.dp, SanctuaryGoldWarm.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Open book illustration / emblem as drawn in user sketch
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Lower Section: Charcoal area with wavy top edge for Distributions (sits flush above shared BottomNav)
+            val hasDistributions = distributions.isNotEmpty()
+            val activeDistribution = distributions.firstOrNull()
+            val distributionParticipants = activeDistribution?.let { participantsByDistribution[it.id].orEmpty() } ?: emptyList()
+
             Box(
                 modifier = Modifier
-                    .size(54.dp)
-                    .clip(CircleShape)
-                    .background(SanctuaryEmeraldMedium.copy(alpha = 0.16f))
-                    .border(1.dp, SanctuaryGoldWarm.copy(alpha = 0.6f), CircleShape),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(176.dp)
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                    contentDescription = null,
-                    tint = SanctuaryEmeraldMedium,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
+                // Wavy top edge with cached Path
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawWithCache {
+                            val w = size.width
+                            val h = size.height
+                            val waveAmp = 18.dp.toPx()
+                            val waveBaseY = 26.dp.toPx()
 
-            // Details
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Continue from last bookmark",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = bookmark?.title ?: "Begin Your Recitation",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = bookmark?.subtitle ?: "Surah Al-Fatihah • Verse 1",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                            val path = Path().apply {
+                                moveTo(0f, waveBaseY)
+                                cubicTo(
+                                    w * 0.25f, waveBaseY - waveAmp,
+                                    w * 0.70f, waveBaseY + waveAmp,
+                                    w, waveBaseY - waveAmp * 0.35f
+                                )
+                                lineTo(w, h)
+                                lineTo(0f, h)
+                                close()
+                            }
 
-            // Resume/Read Button
-            Surface(
-                onClick = if (bookmark != null) onResume else onStartQuran,
-                shape = RoundedCornerShape(12.dp),
-                color = SanctuaryEmeraldMedium,
-                border = BorderStroke(0.8.dp, SanctuaryGoldBright.copy(alpha = 0.6f))
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            onDrawBehind {
+                                drawPath(
+                                    path = path,
+                                    color = colors.deepestSection
+                                )
+                            }
+                        }
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 40.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = SanctuaryGoldBright,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (bookmark != null) "Resume" else "Read",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = SanctuaryGoldBright
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Deck Card: Latest Khatm / User's Active Distribution Card.
- */
-@Composable
-private fun LatestKhatmDeckCard(
-    distribution: DistributionEntity,
-    assignedPara: Int,
-    isAssignedCompleted: Boolean,
-    onOpenDistribution: () -> Unit,
-    onRecitePara: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .height(175.dp)
-            .clickable(onClick = onOpenDistribution),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(
-            1.2.dp,
-            if (distribution.isOnline) OnlineGoldAccent.copy(alpha = 0.65f) else LocalBlueAccent.copy(alpha = 0.65f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (distribution.isOnline) OnlineGoldAccent.copy(alpha = 0.15f) else LocalBlueAccent.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = if (distribution.isOnline) "Active Cloud Khatm" else "Local Session",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = if (distribution.isOnline) OnlineGoldAccent else LocalBlueAccent
-                        ),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    )
-                }
-
-                Text(
-                    text = if (isAssignedCompleted) "Completed ✨" else "Portion Left",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = if (isAssignedCompleted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
-                    )
-                )
-            }
-
-            Column {
-                Text(
-                    text = distribution.name,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Your Assigned: Para $assignedPara",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Surface(
-                    onClick = { onRecitePara(assignedPara) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = SanctuaryEmeraldMedium
-                ) {
+                    // "YOUR DISTRIBUTIONS" block
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 28.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                if (hasDistributions && activeDistribution != null) {
+                                    onOpenDistributionDetail(activeDistribution.id)
+                                } else {
+                                    onCreateNewDistribution(DistributionType.KHATM)
+                                }
+                            },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                            contentDescription = null,
-                            tint = SanctuaryGoldBright,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Recite Para $assignedPara",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = SanctuaryGoldBright
+                        Column(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "YOUR DISTRIBUTIONS",
+                                fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp,
+                                letterSpacing = 1.1.sp,
+                                color = colors.gold,
+                                maxLines = 1
                             )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            if (hasDistributions && activeDistribution != null) {
+                                val completedCount = distributionParticipants.count { it.isCompleted }
+                                Text(
+                                    text = "${activeDistribution.name.take(18)}\n$completedCount of ${activeDistribution.totalTarget} paras read.",
+                                    fontFamily = FrauncesFontFamily,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 22.sp,
+                                    lineHeight = 28.sp,
+                                    color = Color(0xFFF1EBDD),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                val subText = if (distributionParticipants.size > 1) {
+                                    "${distributionParticipants.first().name} and ${distributionParticipants.size - 1} others participating."
+                                } else if (distributionParticipants.isNotEmpty()) {
+                                    "${distributionParticipants.first().name} participating."
+                                } else {
+                                    "Tap to view distribution room."
+                                }
+
+                                Text(
+                                    text = subText,
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFA29F94),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } else {
+                                // Clean Distributions Empty State
+                                Text(
+                                    text = "Start a distribution\nwith family & friends.",
+                                    fontFamily = FrauncesFontFamily,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 22.sp,
+                                    lineHeight = 28.sp,
+                                    color = Color(0xFFF1EBDD),
+                                    maxLines = 2
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = "Distribute 30 paras & complete Khatm together.",
+                                    fontFamily = InterFontFamily,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFA29F94),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        // Overlapping circles with participant initials or clean empty state
+                        val initial1 = if (hasDistributions) {
+                            distributionParticipants.getOrNull(0)?.name?.trim()?.firstOrNull()?.uppercase() ?: "K"
+                        } else {
+                            "+"
+                        }
+                        val initial2 = if (hasDistributions) {
+                            distributionParticipants.getOrNull(1)?.name?.trim()?.firstOrNull()?.uppercase() ?: "30"
+                        } else {
+                            "30"
+                        }
+
+                        OverlappingInitialsCircles(
+                            initial1 = initial1,
+                            initial2 = initial2,
+                            modifier = Modifier.padding(start = 8.dp)
                         )
                     }
                 }
@@ -1171,193 +598,158 @@ private fun LatestKhatmDeckCard(
 }
 
 /**
- * Deck Card 3: Saved Bookmark Spotlight Card.
+ * Top right decorative overlapping circles cropped by screen edge
  */
 @Composable
-private fun BookmarkSpotlightDeckCard(
-    bookmark: com.example.data.quran.LastReadBookmark,
-    totalBookmarks: Int,
-    onResume: () -> Unit,
+private fun TopRightBackgroundBubbles(
+    isDark: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Canvas(
         modifier = modifier
-            .height(175.dp)
-            .clickable(onClick = onResume),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.2.dp, SanctuaryGoldWarm.copy(alpha = 0.5f))
+            .fillMaxWidth()
+            .height(180.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = "Saved Bookmark",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    )
-                }
+        val w = size.width
 
-                Text(
-                    text = "$totalBookmarks saved",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        val circle1Center = Offset(w - 20.dp.toPx(), 40.dp.toPx())
+        val circle1Radius = 75.dp.toPx()
+        val circle1Color = if (isDark) Color(0xFF3B3934) else Color(0xFFE9E1D1)
 
-            Column {
-                Text(
-                    text = bookmark.title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = bookmark.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        drawCircle(
+            color = circle1Color,
+            radius = circle1Radius,
+            center = circle1Center
+        )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Surface(
-                    onClick = onResume,
-                    shape = RoundedCornerShape(8.dp),
-                    color = SanctuaryEmeraldMedium
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = SanctuaryGoldBright, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resume", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = SanctuaryGoldBright))
-                    }
-                }
-            }
-        }
+        val circle2Center = Offset(w + 10.dp.toPx(), 0f)
+        val circle2Radius = 55.dp.toPx()
+        val circle2Color = if (isDark) Color(0xFF2F6B5A) else Color(0xFF1F3D36)
+
+        drawCircle(
+            color = circle2Color,
+            radius = circle2Radius,
+            center = circle2Center
+        )
     }
 }
 
-
-
 /**
- * Active Session Shelf Card with circular progress arc and member count.
+ * 44dp round settings button containing a stroke gear icon (1.8 stroke width)
  */
 @Composable
-private fun ActiveSessionShelfCard(
-    dist: DistributionEntity,
-    participantsCount: Int,
-    completedCount: Int,
+private fun RoundSettingsButton(
     onClick: () -> Unit,
-    onShare: () -> Unit,
+    isDark: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val totalCount = if (dist.type == DistributionType.AMAL) dist.totalTarget.coerceAtLeast(1) else 30
-    val progress = (completedCount.toFloat() / totalCount).coerceIn(0f, 1f)
+    val bgColor = if (isDark) Color(0xFF262B31) else Color(0xFFF6F0E4)
+    val borderColor = if (isDark) Color(0xFF4B8F7B) else Color(0xFFC5A77D)
+    val iconColor = if (isDark) Color(0xFFF1EBDD) else Color(0xFF1B1B19)
 
-    Card(
+    Box(
         modifier = modifier
-            .height(150.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.2.dp, if (dist.roomMode == com.example.data.db.RoomMode.ONLINE) OnlineGoldAccent.copy(alpha = 0.5f) else LocalBlueAccent.copy(alpha = 0.5f))
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .border(1.2.dp, borderColor, CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() }
+            .testTag("home_settings_button")
+            .semantics { role = Role.Button },
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = dist.name,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "$participantsCount Members • ${if (dist.type == DistributionType.AMAL) "Amal" else "Khatm"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+        Canvas(modifier = Modifier.size(24.dp)) {
+            val center = center
+            val outerRadius = 8.5.dp.toPx()
+            val innerRadius = 3.6.dp.toPx()
+            val toothLength = 2.4.dp.toPx()
+            val strokePx = 1.8.dp.toPx()
 
-                // Circular Progress Arc
-                Box(
-                    modifier = Modifier.size(38.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressArc(
-                        progress = progress,
-                        modifier = Modifier.fillMaxSize(),
-                        strokeWidth = 3.5.dp,
-                        progressColor = if (dist.roomMode == com.example.data.db.RoomMode.ONLINE) OnlineGoldAccent else LocalBlueAccent
-                    )
-                    Text(
-                        text = "${(progress * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
+            drawCircle(
+                color = iconColor,
+                radius = innerRadius,
+                center = center,
+                style = Stroke(width = strokePx)
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "$completedCount / $totalCount completed",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            val numTeeth = 8
+            for (i in 0 until numTeeth) {
+                val angle = (i * 2f * PI / numTeeth).toFloat()
+                val startX = center.x + outerRadius * cos(angle)
+                val startY = center.y + outerRadius * sin(angle)
+                val endX = center.x + (outerRadius + toothLength) * cos(angle)
+                val endY = center.y + (outerRadius + toothLength) * sin(angle)
+
+                drawLine(
+                    color = iconColor,
+                    start = Offset(startX, startY),
+                    end = Offset(endX, endY),
+                    strokeWidth = strokePx,
+                    cap = StrokeCap.Round
                 )
-
-                Surface(
-                    onClick = onShare,
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.size(30.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
             }
+
+            drawCircle(
+                color = iconColor,
+                radius = outerRadius,
+                center = center,
+                style = Stroke(width = strokePx)
+            )
+        }
+    }
+}
+
+/**
+ * Two overlapping circles with initials:
+ * Circle 1: 58dp diameter in gold
+ * Circle 2: 40dp diameter in pine, offset to bottom-right
+ */
+@Composable
+private fun OverlappingInitialsCircles(
+    initial1: String,
+    initial2: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = QuranBaantoDesignSystem.colors
+
+    Box(
+        modifier = modifier.size(width = 84.dp, height = 68.dp),
+        contentAlignment = Alignment.TopStart
+    ) {
+        Box(
+            modifier = Modifier
+                .size(58.dp)
+                .clip(CircleShape)
+                .background(colors.gold),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initial1,
+                fontFamily = FrauncesFontFamily,
+                fontWeight = FontWeight.Normal,
+                fontSize = if (initial1.length > 1) 16.sp else 21.sp,
+                color = Color(0xFF1B1B19)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .offset(x = 40.dp, y = 26.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(colors.pine),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = initial2,
+                fontFamily = InterFontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (initial2.length > 1) 12.sp else 15.sp,
+                color = Color(0xFFF1EBDD)
+            )
         }
     }
 }
